@@ -6,21 +6,7 @@ import sys
 from aiogram.client.bot import DefaultBotProperties
 import logging
 import asyncio
-from pyrogram import Client
 
-"""
-Эту часть можно вырезать
-Ниже будет .env_template (со след строки все скопировать и вставать в .env файл)
-
-DB_USER=
-DB_PASS=
-DB_HOST=
-DB_PORT=
-DB_NAME=
-TOKEN_API_TG=
-"""
-
-sys.path.append(os.path.join(sys.path[0], 'k_bot'))
 
 load_dotenv('.env')
 token = os.getenv('TOKEN_API_TG')

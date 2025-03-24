@@ -18,7 +18,7 @@ class User(Base):
     __tablename__ = "user"
 
     id = Column(BigInteger, primary_key=True, index=True, nullable=False)
-    name = Column(String, default='')
+    api_key = Column(String, default=None)
     is_superuser = Column(Boolean, default=False)
 
 

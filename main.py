@@ -1,12 +1,9 @@
 import asyncio
-import time
-from random import randint
 
 from aiogram import Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
 
 from confige import BotConfig
-from database.req import *
 from handlers import errors, user
 from instance import bot
 from database.models import async_main
