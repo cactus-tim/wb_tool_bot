@@ -8,7 +8,7 @@ from functools import wraps
 from instance import logger, bot
 from aiohttp import ClientConnectorError
 from errors.errors import *
-
+from keyboards.keyboards import get_main_kb
 
 router = Router()
 
@@ -55,7 +55,7 @@ def db_error_handler(func):
     return wrapper
 
 
-async def safe_send_message(bott: Bot, recipient, text: str, reply_markup=ReplyKeyboardRemove(), retry_attempts=3, delay=5) -> Message:
+async def safe_send_message(bott: Bot, recipient, text: str, reply_markup=get_main_kb(), retry_attempts=3, delay=5) -> Message:
     """Отправка сообщения с обработкой ClientConnectorError, поддержкой reply_markup и выбором метода отправки."""
 
     for attempt in range(retry_attempts):

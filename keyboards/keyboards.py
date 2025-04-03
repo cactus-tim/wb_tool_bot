@@ -17,3 +17,11 @@ def get_some_kb() -> ReplyKeyboardMarkup:
         resize_keyboard=True
     )
     return keyboard
+
+
+def get_main_kb() -> ReplyKeyboardMarkup:
+    keyboard = ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text='Добавить ключ')], [KeyboardButton(text='Получить отчет')]],
+        resize_keyboard=True
+    )
+    return keyboard
