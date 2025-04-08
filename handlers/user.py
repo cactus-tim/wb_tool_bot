@@ -8,18 +8,13 @@ from aiogram import Router, F, types
 from aiogram.types import Message, CallbackQuery, BufferedInputFile
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from pyrogram import Client, errors
-from telethon import TelegramClient, errors
-from telethon.tl.custom import Conversation
-import math
 import requests
 import io
 import pandas as pd
 import time
 
 from handlers.errors import safe_send_message
-from instance import name, api_id, api_hash
-from keyboards.keyboards import get_some_kb, get_cancel_ikb, get_app_ikb
+from keyboards.keyboards import get_cancel_ikb, get_app_ikb
 from instance import bot, logger
 from database.req import *
 
