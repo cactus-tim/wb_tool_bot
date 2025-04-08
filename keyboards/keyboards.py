@@ -1,11 +1,18 @@
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton
 
 
-def get_some_ikb() -> InlineKeyboardMarkup:
+def get_cancel_ikb() -> InlineKeyboardMarkup:
     ikb = [
-        [InlineKeyboardButton(text="Кнопка 1", callback_data="f_btn")],
-        [InlineKeyboardButton(text="Кнопка 2", callback_data="s_btn"), InlineKeyboardButton(text="Кнопка 3", callback_data="t_btn")],
+        [InlineKeyboardButton(text="Отмена", callback_data="cancel")],
+    ]
+    ikeyboard = InlineKeyboardMarkup(inline_keyboard=ikb)
+    return ikeyboard
 
+
+def get_app_ikb() -> InlineKeyboardMarkup:
+    ikb = [
+        [InlineKeyboardButton(text="Добавить СПП", callback_data="spp:yes"),
+         InlineKeyboardButton(text="Без СПП", callback_data="spp:no")],
     ]
     ikeyboard = InlineKeyboardMarkup(inline_keyboard=ikb)
     return ikeyboard
@@ -21,7 +28,7 @@ def get_some_kb() -> ReplyKeyboardMarkup:
 
 def get_main_kb() -> ReplyKeyboardMarkup:
     keyboard = ReplyKeyboardMarkup(
-        keyboard=[[KeyboardButton(text='Добавить ключ')], [KeyboardButton(text='Получить отчет')]],
+        keyboard=[[KeyboardButton(text='Добавить ключ')], [KeyboardButton(text='Получить отчет')], [KeyboardButton(text='Получить SPP')]],
         resize_keyboard=True
     )
     return keyboard

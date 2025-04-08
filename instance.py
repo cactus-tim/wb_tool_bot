@@ -27,3 +27,8 @@ logging.basicConfig(
 
 
 logger = logging.getLogger(__name__)
+
+
+name = os.getenv('ACCOUNT_NAME')
+api_id = os.getenv('API_ID')
+api_hash = os.getenv('API_HASH')
