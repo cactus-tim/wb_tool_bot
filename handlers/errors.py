@@ -2,6 +2,7 @@ from aiogram import Router, types, Bot
 import asyncio
 from aiogram.types import ReplyKeyboardRemove, Message
 from aiogram.enums import ParseMode
+from typing import Any
 from aiogram.exceptions import TelegramBadRequest, TelegramRetryAfter, TelegramUnauthorizedError, TelegramNetworkError
 from functools import wraps
 
@@ -14,9 +15,18 @@ router = Router()
 
 
 @router.errors()
-async def global_error_handler(update: types.Update, exception: Exception):
+async def global_error_handler(event: Any):
+    exception = event.exception
+    update = event.update
+
+    user_id = (
+        update.message.from_user.id
+        if update and update.message and update.message.from_user
+        else "Unknown"
+    )
+
     if isinstance(exception, TelegramBadRequest):
-        logger.error(f"Некорректный запрос: {exception}. Пользователь: {update.message.from_user.id}")
+        logger.error(f"Некорректный запрос: {exception}. Пользователь: {user_id}")
         return True
     elif isinstance(exception, TelegramRetryAfter):
         logger.error(f"Request limit exceeded. Retry after {exception.retry_after} seconds.")

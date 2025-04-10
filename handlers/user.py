@@ -71,7 +71,11 @@ async def fetch_data(task_id, headers, bot, callback, msg, user, max_retries=3):
 
 async def get_spp(ids: list, user_id: int) -> dict:
     res = {}
-    key = (await get_user(user_id)).api_key
+    user = await get_user(user_id)
+    if not user:
+        logger.exception(f"Uncorrect user data")
+        return res
+    key = user.api_key
     headers = {
         'Authorization': f'Bearer {key}'
     }
@@ -152,7 +156,7 @@ async def get_spp(ids: list, user_id: int) -> dict:
                 res[el] = 'Не удалось получить СПП'
                 continue
             if response1.status_code == 200:
-                before = int(response.json()['data']['listGoods'][0]['sizes'][0]['discountedPrice'])
+                before = int(response.json()['data']['listGoods'][0]['sizes'][0]['discountedPrice'])  # TODO: list index out of range
                 if before == 0:
                     res[el] = 'Не удалось получить СПП'
                     continue
@@ -375,6 +379,9 @@ async def second_date(callback: CallbackQuery, state: FSMContext):
         to_del = (await safe_send_message(bot, callback,
                                           text=f'Ожидаемое время получения - {int(len(ids) * 0.6)} секунд')).message_id
         spp = await get_spp(ids, user.id)
+        if spp[0] == 0:
+            await safe_send_message(bot, callback, "Неизвестная ошибка, попробуйте позже")
+            return
 
         df['spp'] = df['nmId'].map(spp)
 
@@ -421,7 +428,19 @@ async def spp_list(message: Message, state: FSMContext):
         return
     to_del = (await safe_send_message(bot, message, text=f'Ожидаемое время получения - {int(len(ids)*0.6)} секунд')).message_id
     spp = await get_spp(ids, message.from_user.id)
-    text = ''.join(f"{key} - {val}\n" for key, val in spp.items())
+    if spp.get(0, 1) == 0:
+        await safe_send_message(bot, message, "Неизвестная ошибка, попробуйте позже")
+        return
+    texts = []
+    text, cnt = '', 0
+    for key, val in spp.items():
+        if cnt >= 120:
+            texts.append(text)
+            text, cnt = '', 0
+        text += f"{key} - {val}\n"
+        cnt += 1
+
     await bot.delete_message(chat_id=message.chat.id, message_id=to_del)
-    await safe_send_message(bot, message, text=text)
+    for text in texts:
+        await safe_send_message(bot, message, text=text)
     await state.clear()
