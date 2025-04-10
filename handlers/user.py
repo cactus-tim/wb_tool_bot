@@ -439,6 +439,7 @@ async def spp_list(message: Message, state: FSMContext):
             text, cnt = '', 0
         text += f"{key} - {val}\n"
         cnt += 1
+    texts.append(text)
 
     await bot.delete_message(chat_id=message.chat.id, message_id=to_del)
     for text in texts:
