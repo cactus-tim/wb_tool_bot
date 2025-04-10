@@ -379,7 +379,7 @@ async def second_date(callback: CallbackQuery, state: FSMContext):
         to_del = (await safe_send_message(bot, callback,
                                           text=f'Ожидаемое время получения - {int(len(ids) * 0.6)} секунд')).message_id
         spp = await get_spp(ids, user.id)
-        if spp[0] == 0:
+        if spp.get(0, 1) == 0:
             await safe_send_message(bot, callback, "Неизвестная ошибка, попробуйте позже")
             return
 
