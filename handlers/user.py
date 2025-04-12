@@ -1,4 +1,5 @@
 import asyncio
+import datetime
 import json
 import re
 import tempfile
@@ -14,7 +15,7 @@ import pandas as pd
 import time
 
 from handlers.errors import safe_send_message
-from keyboards.keyboards import get_cancel_ikb, get_app_ikb
+from keyboards.keyboards import get_cancel_ikb, get_app_ikb, get_type_ikb
 from instance import bot, logger
 from database.req import *
 
@@ -358,6 +359,9 @@ async def second_date(callback: CallbackQuery, state: FSMContext):
     data = await fetch_data(task_id, headers, bot, callback, msg, user)
     if data is not None:
         df = pd.DataFrame(data)
+    else:
+        await safe_send_message(bot, callback, 'Какая-то ошибка, попробуйте позже')
+        return
 
     with io.BytesIO() as buffer:
         with pd.ExcelWriter(buffer, engine="xlsxwriter") as writer:
@@ -413,9 +417,71 @@ class SPP(StatesGroup):
 
 @router.message(F.text == 'Получить SPP' or Command('spp'))
 async def cmd_spp(message: Message, state: FSMContext):
-    await safe_send_message(bot, message, text="Отправьте список артикулов через перевод строки",
-                            reply_markup=get_cancel_ikb())
-    await state.set_state(SPP.waiting_list)
+    await safe_send_message(bot, message,
+                            text="Вы отправите свой список артикулов или хотите получить СПП из сегоднящнего отчета?",
+                            reply_markup=get_type_ikb())
+    # await state.set_state(SPP.waiting_list)
+
+
+@router.callback_query(lambda c: c.data and c.data.startswith("type_spp"))
+async def cmd_spp_1(callback: CallbackQuery, state: FSMContext):
+    type = callback.data.split(':')[1]
+    user = await get_user(callback.from_user.id)
+    if not user.api_key:
+        await safe_send_message(bot, callback, text="Необходимо добавить ключ доступа")
+        return
+    if type == 'list':
+        await safe_send_message(bot, callback, text="Отправьте список артикулов через перевод строки",
+                                reply_markup=get_cancel_ikb())
+        await state.set_state(SPP.waiting_list)
+    else:
+        date_to = datetime.datetime.utcnow().date().strftime('%Y-%m-%d')
+        msg = await safe_send_message(bot, callback,
+                                      text="Список формируется, пожалуйста подождите, это займет пару минут")
+        url = f'https://seller-analytics-api.wildberries.ru/api/v1/paid_storage?dateFrom={date_to}&dateTo={date_to}'
+        headers = {
+            'Authorization': f'Bearer {user.api_key}'
+        }
+        response = requests.get(url, headers=headers)
+        if response.status_code != 200:
+            if response.status_code == 401:
+                await safe_send_message(bot, callback, text="Недействительный ключ")
+            elif response.status_code == 400:
+                await safe_send_message(bot, callback, text="Неправильный формат данных")
+            else:
+                await safe_send_message(bot, callback, text="Ошибка при запросе")
+            await bot.delete_message(chat_id=user.id, message_id=msg.message_id)
+            return
+        task_id = response.json()['data']['taskId']
+        data = await fetch_data(task_id, headers, bot, callback, msg, user)
+        if data is not None:
+            df = pd.DataFrame(data)
+        else:
+            await safe_send_message(bot, callback, 'Какая-то ошибка, попробуйте позже')
+            return
+        ids = list(int(el) for el in df['nmId'].unique())
+
+        to_del = (await safe_send_message(bot, user.id,
+                                          text=f'Ожидаемое время получения - {int(len(ids) * 0.6)} секунд')).message_id
+        spp = await get_spp(ids, user.id)
+        if spp.get(0, 1) == 0:
+            await safe_send_message(bot, user.id, "Неизвестная ошибка, попробуйте позже")
+            return
+        texts = []
+        text, cnt = '', 0
+        for key, val in spp.items():
+            if cnt >= 120:
+                texts.append(text)
+                text, cnt = '', 0
+            text += f"{key} - {val}\n"
+            cnt += 1
+        texts.append(text)
+
+        await bot.delete_message(chat_id=user.id, message_id=to_del)
+        await bot.delete_message(chat_id=user.id, message_id=msg.message_id)
+        for text in texts:
+            await safe_send_message(bot, user.id, text=text)
+        await state.clear()
 
 
 @router.message(SPP.waiting_list)

@@ -18,6 +18,15 @@ def get_app_ikb() -> InlineKeyboardMarkup:
     return ikeyboard
 
 
+def get_type_ikb() -> InlineKeyboardMarkup:
+    ikb = [
+        [InlineKeyboardButton(text="Список артикулов", callback_data="type_spp:list"),
+         InlineKeyboardButton(text="Из отчета", callback_data="type_spp:table")],
+    ]
+    ikeyboard = InlineKeyboardMarkup(inline_keyboard=ikb)
+    return ikeyboard
+
+
 def get_some_kb() -> ReplyKeyboardMarkup:
     keyboard = ReplyKeyboardMarkup(
         keyboard=[[KeyboardButton(text='пу')], [KeyboardButton(text='пупу'), KeyboardButton(text='пупупу')]],
