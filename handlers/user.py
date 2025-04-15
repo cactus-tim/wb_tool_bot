@@ -4,7 +4,7 @@ import json
 import re
 import tempfile
 
-from aiogram.filters import Command, CommandStart
+from aiogram.filters import Command, CommandStart, StateFilter
 from aiogram import Router, F, types
 from aiogram.types import Message, CallbackQuery, BufferedInputFile
 from aiogram.fsm.context import FSMContext
@@ -15,10 +15,9 @@ import pandas as pd
 import time
 
 from handlers.errors import safe_send_message
-from keyboards.keyboards import get_cancel_ikb, get_app_ikb, get_type_ikb
+from keyboards.keyboards import get_cancel_ikb, get_app_ikb, get_input_format_ikb, get_output_format_ikb, get_main_kb
 from instance import bot, logger
 from database.req import *
-
 
 router = Router()
 
@@ -101,7 +100,7 @@ async def get_spp(ids: list, user_id: int) -> dict:
     start_time = time.perf_counter()
     df = pd.DataFrame(response.json()['data']['listGoods'])
     good, retry, all = [], [], {int(row['nmID']): int(row['sizes'][0].get('discountedPrice'))
-    for _, row in df.iterrows()}
+                                for _, row in df.iterrows()}
     for el in ids:
         if el in all.keys():
             url = f'https://card.wb.ru/cards/v2/detail?appType=1&curr=rub&dest=-3339985&hide_dtype=13&spp=30&ab_testing=false&lang=ru&nm={el}'
@@ -121,14 +120,14 @@ async def get_spp(ids: list, user_id: int) -> dict:
                 except Exception as e:
                     res[el] = 'Товара нет в наличии'
                     continue
-                res[el] = 100 - int((after / before)*100)
+                res[el] = 100 - int((after / before) * 100)
             else:
                 res[el] = 'Не удалось получить СПП'
         else:
             retry.append(el)
     cur_timer = time.perf_counter() - start_time
     if cur_timer <= 10:
-        await asyncio.sleep(10-cur_timer)
+        await asyncio.sleep(10 - cur_timer)
     chunks = [retry[i:i + 6] for i in range(0, len(retry), 6)]
     for chunk in chunks:
         start_time = time.perf_counter()
@@ -157,7 +156,8 @@ async def get_spp(ids: list, user_id: int) -> dict:
                 res[el] = 'Не удалось получить СПП'
                 continue
             if response1.status_code == 200:
-                before = int(response.json()['data']['listGoods'][0]['sizes'][0]['discountedPrice'])  # TODO: list index out of range
+                before = int(response.json()['data']['listGoods'][0]['sizes'][0][
+                                 'discountedPrice'])  # TODO: list index out of range
                 if before == 0:
                     res[el] = 'Не удалось получить СПП'
                     continue
@@ -166,7 +166,7 @@ async def get_spp(ids: list, user_id: int) -> dict:
                 except Exception as e:
                     res[el] = 'Товара нет в наличии'
                     continue
-                res[el] = 100 - int((after / before)*100) if after != 0 else 0
+                res[el] = 100 - int((after / before) * 100) if after != 0 else 0
             else:
                 res[el] = 'Не удалось получить СПП'
         cur_timer = time.perf_counter() - start_time
@@ -174,6 +174,41 @@ async def get_spp(ids: list, user_id: int) -> dict:
             await asyncio.sleep(11 - cur_timer)
 
     return res
+
+
+async def send_spp(user_id: int, spp: dict, output_format: str, to_del: int, msg_id: int = None):
+    if output_format == 'list':
+        texts = []
+        text, cnt = '', 0
+        for key, val in spp.items():
+            if cnt >= 120:
+                texts.append(text)
+                text, cnt = '', 0
+            text += f"{key} - {val}\n"
+            cnt += 1
+        texts.append(text)
+
+        await bot.delete_message(chat_id=user_id, message_id=to_del)
+        if msg_id:
+            await bot.delete_message(chat_id=user_id, message_id=msg_id)
+        for text in texts:
+            await safe_send_message(bot, user_id, text=text)
+    elif output_format == 'xlsx':
+        df = pd.DataFrame(list(spp.items()), columns=['ID', 'Value'])
+        with io.BytesIO() as buffer:
+            with pd.ExcelWriter(buffer, engine="xlsxwriter") as writer:
+                df.to_excel(writer, index=False, sheet_name="Sheet1")
+                worksheet = writer.sheets["Sheet1"]
+                for idx, col in enumerate(df.columns):
+                    max_len = max(df[col].astype(str).map(len).max(), len(str(col))) + 2
+                    worksheet.set_column(idx, idx, max_len)
+            buffer.seek(0)
+            temp_file = BufferedInputFile(buffer.read(), filename="report.xlsx")
+            await bot.delete_message(chat_id=user_id, message_id=to_del)
+            if msg_id:
+                await bot.delete_message(chat_id=user_id, message_id=msg_id)
+            await bot.send_document(chat_id=user_id, document=temp_file, caption="Отчет готов",
+                                    reply_markup=get_main_kb())
 
 
 @router.message(CommandStart())
@@ -195,7 +230,7 @@ async def cmd_info(message: Message):
               f"<a href=\"{link}\">Как получить ключ?</a>\n"
               "Чтобы это сделать используй кнопку 'Добавить ключ'\n"
               "Что бы получить отчет о стоимости хранения используй кнопку 'Получить отчет'\n"
-        )
+              )
     )
 
 
@@ -254,7 +289,8 @@ class Report(StatesGroup):
 @router.message(F.text == 'Получить отчет' or Command('report'))
 async def cmd_report(message: Message, state: FSMContext):
     if message.text == 'Получить отчет':
-        await safe_send_message(bot, message, text="Укажите дату начала отчета в формате YYYY-MM-DD")
+        await safe_send_message(bot, message, text="Укажите дату начала отчета в формате YYYY-MM-DD\n"
+                                                   "Помните, что период не может превышать неделю")
         await state.set_state(Report.waiting_first_date)
         return
     try:
@@ -303,7 +339,8 @@ async def cmd_report(message: Message, state: FSMContext):
         buffer.seek(0)
         temp_file = BufferedInputFile(buffer.read(), filename="report.xlsx")
         await bot.delete_message(chat_id=message.chat.id, message_id=msg.message_id)
-        await bot.send_document(chat_id=message.chat.id, document=temp_file, caption="Отчет готов")
+        await bot.send_document(chat_id=message.chat.id, document=temp_file, caption="Отчет готов",
+                                reply_markup=get_main_kb())
 
 
 @router.message(Report.waiting_first_date)
@@ -312,9 +349,11 @@ async def first_date(message: Message, state: FSMContext):
         time.strptime(message.text, '%Y-%m-%d')
     except ValueError:
         await safe_send_message(bot, message, text="Неверный формат даты, необходимо указать дату в формате YYYY-MM-DD")
+        await state.clear()
         return
     await state.update_data(first_date=message.text)
-    await safe_send_message(bot, message, text="Укажите дату конца отчета в формате YYYY-MM-DD")
+    await safe_send_message(bot, message, text="Укажите дату конца отчета в формате YYYY-MM-DD\n"
+                                               "Помните, что период не может превышать неделю")
     await state.set_state(Report.waiting_second_date)
 
 
@@ -324,23 +363,17 @@ async def add_spp(message: Message, state: FSMContext):
         time.strptime(message.text, '%Y-%m-%d')
     except ValueError:
         await safe_send_message(bot, message, text="Неверный формат даты, необходимо указать дату в формате YYYY-MM-DD")
+        await state.clear()
         return
-    await state.update_data(second_date=message.text)
-    await safe_send_message(bot, message, text="Добавить СПП к отсчету?\nЭто займет дополнительное время",
-                            reply_markup=get_app_ikb())
-    await state.set_state(Report.waiting_spp)
 
-
-@router.callback_query(lambda c: c.data and c.data.startswith("spp"))
-async def second_date(callback: CallbackQuery, state: FSMContext):
-    flag = callback.data.split(':')[1]
-    user = await get_user(callback.from_user.id)
+    user = await get_user(message.from_user.id)
     if not user.api_key:
-        await safe_send_message(bot, callback, text="Необходимо добавить ключ доступа")
+        await safe_send_message(bot, message, text="Необходимо добавить ключ доступа")
+        await state.clear()
         return
-    date_to = (await state.get_data()).get('second_date')
+    date_to = message.text
     date_from = (await state.get_data()).get('first_date')
-    msg = await safe_send_message(bot, callback, text="Отчет формируется, пожалуйста подождите, это займет пару минут")
+    msg = await safe_send_message(bot, message, text="Отчет формируется, пожалуйста подождите, это займет пару минут")
     url = f'https://seller-analytics-api.wildberries.ru/api/v1/paid_storage?dateFrom={date_from}&dateTo={date_to}'
     headers = {
         'Authorization': f'Bearer {user.api_key}'
@@ -348,19 +381,21 @@ async def second_date(callback: CallbackQuery, state: FSMContext):
     response = requests.get(url, headers=headers)
     if response.status_code != 200:
         if response.status_code == 401:
-            await safe_send_message(bot, callback, text="Недействительный ключ")
+            await safe_send_message(bot, message, text="Недействительный ключ")
         elif response.status_code == 400:
-            await safe_send_message(bot, callback, text="Неправильный формат данных")
+            await safe_send_message(bot, message, text="Неправильный формат данных")
         else:
-            await safe_send_message(bot, callback, text="Ошибка при запросе")
+            await safe_send_message(bot, message, text="Ошибка при запросе")
         await bot.delete_message(chat_id=user.id, message_id=msg.message_id)
+        await state.clear()
         return
     task_id = response.json()['data']['taskId']
-    data = await fetch_data(task_id, headers, bot, callback, msg, user)
+    data = await fetch_data(task_id, headers, bot, message, msg, user)
     if data is not None:
         df = pd.DataFrame(data)
     else:
-        await safe_send_message(bot, callback, 'Какая-то ошибка, попробуйте позже')
+        await safe_send_message(bot, message, 'Какая-то ошибка, попробуйте позже')
+        await state.clear()
         return
 
     with io.BytesIO() as buffer:
@@ -373,34 +408,8 @@ async def second_date(callback: CallbackQuery, state: FSMContext):
         buffer.seek(0)
         temp_file = BufferedInputFile(buffer.read(), filename="report.xlsx")
         await bot.delete_message(chat_id=user.id, message_id=msg.message_id)
-        if flag == 'yes':
-            await bot.send_document(chat_id=user.id, document=temp_file, caption="Отчет без СПП, готовлю с ним")
-        else:
-            await bot.send_document(chat_id=user.id, document=temp_file, caption="Отчет готов")
-
-    if flag == 'yes':
-        ids = list(int(el) for el in df['nmId'].unique())
-        to_del = (await safe_send_message(bot, callback,
-                                          text=f'Ожидаемое время получения - {int(len(ids) * 0.6)} секунд')).message_id
-        spp = await get_spp(ids, user.id)
-        if spp.get(0, 1) == 0:
-            await safe_send_message(bot, callback, "Неизвестная ошибка, попробуйте позже")
-            return
-
-        df['spp'] = df['nmId'].map(spp)
-
-        with io.BytesIO() as buffer:
-            with pd.ExcelWriter(buffer, engine="xlsxwriter") as writer:
-                df.to_excel(writer, index=False, sheet_name="Sheet1")
-                worksheet = writer.sheets["Sheet1"]
-                for idx, col in enumerate(df.columns):
-                    max_len = max(df[col].astype(str).map(len).max(), len(str(col))) + 2
-                    worksheet.set_column(idx, idx, max_len)
-            buffer.seek(0)
-            temp_file = BufferedInputFile(buffer.read(), filename="report.xlsx")
-            await bot.delete_message(chat_id=user.id, message_id=to_del)
-            await bot.send_document(chat_id=user.id, document=temp_file, caption="Отчет готов")
-
+        await bot.send_document(chat_id=user.id, document=temp_file, caption="Отчет готов",
+                                reply_markup=get_main_kb())
     await state.clear()
 
 
@@ -412,29 +421,54 @@ async def cancel(callback: CallbackQuery, state: FSMContext):
 
 
 class SPP(StatesGroup):
+    waiting_input = State()
+    waiting_output = State()
     waiting_list = State()
 
 
 @router.message(F.text == 'Получить SPP' or Command('spp'))
-async def cmd_spp(message: Message, state: FSMContext):
+async def cmd_spp_input(message: Message, state: FSMContext):
     await safe_send_message(bot, message,
-                            text="Вы отправите свой список артикулов или хотите получить СПП из сегоднящнего отчета?",
-                            reply_markup=get_type_ikb())
+                            text="Выберете формат предоставляемых данных",
+                            reply_markup=get_input_format_ikb())
     # await state.set_state(SPP.waiting_list)
+    await state.set_state(SPP.waiting_input)
 
 
-@router.callback_query(lambda c: c.data and c.data.startswith("type_spp"))
-async def cmd_spp_1(callback: CallbackQuery, state: FSMContext):
-    type = callback.data.split(':')[1]
+@router.callback_query(StateFilter(SPP.waiting_input), lambda c: c.data and c.data.startswith("type_input_spp"))
+async def cmd_spp_output(callback: CallbackQuery, state: FSMContext):
+    format = callback.data.split(':')[1]
+    await state.set_data({'input_format': format})
+    await safe_send_message(bot, callback, text="Выберете формат предоставления СПП",
+                            reply_markup=get_output_format_ikb())
+    await state.set_state(SPP.waiting_output)
+
+
+@router.callback_query(StateFilter(SPP.waiting_output), lambda c: c.data and c.data.startswith("type_output_spp"))
+async def cmd_spp(callback: CallbackQuery, state: FSMContext):
+    output_format = callback.data.split(':')[1]
+    input_format = (await state.get_data()).get('input_format', '')
     user = await get_user(callback.from_user.id)
     if not user.api_key:
         await safe_send_message(bot, callback, text="Необходимо добавить ключ доступа")
+        await state.clear()
         return
-    if type == 'list':
+    if input_format == '':
+        await safe_send_message(bot, callback, 'Какая то ошибка, попробуйте еще раз')
+        await state.clear()
+        return
+    elif input_format == 'list':
         await safe_send_message(bot, callback, text="Отправьте список артикулов через перевод строки",
                                 reply_markup=get_cancel_ikb())
+        await state.set_data({'output_format': output_format, 'input_format': input_format})
         await state.set_state(SPP.waiting_list)
-    else:
+    elif input_format == 'xlsx':
+        await safe_send_message(bot, callback,
+                                text="Отправьте excel таблицу, содержащую столбец 'nmId' с артикулами нужных товаров",
+                                reply_markup=get_cancel_ikb())
+        await state.set_data({'output_format': output_format, 'input_format': input_format})
+        await state.set_state(SPP.waiting_list)
+    elif input_format == 'table':
         date_to = datetime.datetime.utcnow().date().strftime('%Y-%m-%d')
         msg = await safe_send_message(bot, callback,
                                       text="Список формируется, пожалуйста подождите, это займет пару минут")
@@ -451,6 +485,7 @@ async def cmd_spp_1(callback: CallbackQuery, state: FSMContext):
             else:
                 await safe_send_message(bot, callback, text="Ошибка при запросе")
             await bot.delete_message(chat_id=user.id, message_id=msg.message_id)
+            await state.clear()
             return
         task_id = response.json()['data']['taskId']
         data = await fetch_data(task_id, headers, bot, callback, msg, user)
@@ -458,6 +493,7 @@ async def cmd_spp_1(callback: CallbackQuery, state: FSMContext):
             df = pd.DataFrame(data)
         else:
             await safe_send_message(bot, callback, 'Какая-то ошибка, попробуйте позже')
+            await state.clear()
             return
         ids = list(int(el) for el in df['nmId'].unique())
 
@@ -466,48 +502,64 @@ async def cmd_spp_1(callback: CallbackQuery, state: FSMContext):
         spp = await get_spp(ids, user.id)
         if spp.get(0, 1) == 0:
             await safe_send_message(bot, user.id, "Неизвестная ошибка, попробуйте позже")
+            await state.clear()
             return
-        texts = []
-        text, cnt = '', 0
-        for key, val in spp.items():
-            if cnt >= 120:
-                texts.append(text)
-                text, cnt = '', 0
-            text += f"{key} - {val}\n"
-            cnt += 1
-        texts.append(text)
-
-        await bot.delete_message(chat_id=user.id, message_id=to_del)
-        await bot.delete_message(chat_id=user.id, message_id=msg.message_id)
-        for text in texts:
-            await safe_send_message(bot, user.id, text=text)
+        await send_spp(user.id, spp, output_format, to_del, msg_id=msg.message_id)
         await state.clear()
 
 
 @router.message(SPP.waiting_list)
 async def spp_list(message: Message, state: FSMContext):
-    try:
-        ids = message.text.split('\n')
-        ids = [int(i) for i in ids]
-    except Exception as e:
-        await safe_send_message(bot, message, text="Необходимо указать список артикулов через перевод строки")
+    output_format = (await state.get_data()).get('output_format', '')
+    input_format = (await state.get_data()).get('input_format', '')
+    data = await state.get_data()
+    if input_format == '':
+        await safe_send_message(bot, message, 'Какая то ошибка, попробуйте еще раз')
+        await state.clear()
         return
-    to_del = (await safe_send_message(bot, message, text=f'Ожидаемое время получения - {int(len(ids)*0.6)} секунд')).message_id
+    elif input_format == 'list':
+        try:
+            ids = message.text.split('\n')
+            ids = [int(i) for i in ids]
+        except Exception as e:
+            await safe_send_message(bot, message, text="Необходимо указать список артикулов через перевод строки")
+            await state.clear()
+            return
+    elif input_format == 'xlsx':
+        if not message.document:
+            await safe_send_message(bot, message, "Пожалуйста, отправьте Excel файл.")
+            await state.clear()
+            return
+        file_info = message.document
+        file_id = file_info.file_id
+        try:
+            telegram_file = await message.bot.get_file(file_id)
+            file_buffer = io.BytesIO()
+            await message.bot.download_file(telegram_file.file_path, destination=file_buffer)
+            file_buffer.seek(0)
+        except Exception as e:
+            print('=='*50, '\n', e)
+            await safe_send_message(bot, message, "Ошибка при загрузке файла. Попробуйте позже.")
+            await state.clear()
+            return
+        try:
+            df = pd.read_excel(file_buffer)
+        except Exception as e:
+            await safe_send_message(bot, message, "Ошибка при чтении Excel файла. Убедитесь, что файл корректный.")
+            await state.clear()
+            return
+        if "nmId" not in df.columns:
+            await safe_send_message(bot, message, "Столбец 'nmId' отсутствует в файле.")
+            await state.clear()
+            return
+        ids = list(int(el) for el in df['nmId'].unique())
+
+    to_del = (await safe_send_message(bot, message,
+                                      text=f'Ожидаемое время получения - {int(len(ids) * 0.6)} секунд')).message_id
     spp = await get_spp(ids, message.from_user.id)
     if spp.get(0, 1) == 0:
         await safe_send_message(bot, message, "Неизвестная ошибка, попробуйте позже")
+        await state.clear()
         return
-    texts = []
-    text, cnt = '', 0
-    for key, val in spp.items():
-        if cnt >= 120:
-            texts.append(text)
-            text, cnt = '', 0
-        text += f"{key} - {val}\n"
-        cnt += 1
-    texts.append(text)
-
-    await bot.delete_message(chat_id=message.chat.id, message_id=to_del)
-    for text in texts:
-        await safe_send_message(bot, message, text=text)
+    await send_spp(message.from_user.id, spp, output_format, to_del)
     await state.clear()

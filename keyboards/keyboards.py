@@ -18,10 +18,20 @@ def get_app_ikb() -> InlineKeyboardMarkup:
     return ikeyboard
 
 
-def get_type_ikb() -> InlineKeyboardMarkup:
+def get_input_format_ikb() -> InlineKeyboardMarkup:
     ikb = [
-        [InlineKeyboardButton(text="Список артикулов", callback_data="type_spp:list"),
-         InlineKeyboardButton(text="Из отчета", callback_data="type_spp:table")],
+        [InlineKeyboardButton(text="Список артикулов", callback_data="type_input_spp:list")],
+        [InlineKeyboardButton(text="Excel таблица с артикулями", callback_data="type_input_spp:xlsx")],
+        [InlineKeyboardButton(text="Выгрузка по юр лицу", callback_data="type_input_spp:table")],
+    ]
+    ikeyboard = InlineKeyboardMarkup(inline_keyboard=ikb)
+    return ikeyboard
+
+
+def get_output_format_ikb() -> InlineKeyboardMarkup:
+    ikb = [
+        [InlineKeyboardButton(text="Список", callback_data="type_output_spp:list")],
+        [InlineKeyboardButton(text="Excel таблица", callback_data="type_output_spp:xlsx")],
     ]
     ikeyboard = InlineKeyboardMarkup(inline_keyboard=ikb)
     return ikeyboard
