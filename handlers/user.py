@@ -469,7 +469,10 @@ async def cmd_spp(callback: CallbackQuery, state: FSMContext):
         await state.set_data({'output_format': output_format, 'input_format': input_format})
         await state.set_state(SPP.waiting_list)
     elif input_format == 'table':
-        date_to = datetime.datetime.utcnow().date().strftime('%Y-%m-%d')
+        if datetime.datetime.utcnow().hour <= 14:
+            date_to = (datetime.datetime.utcnow() - datetime.timedelta(days=1)).date().strftime('%Y-%m-%d')
+        else:
+            date_to = datetime.datetime.utcnow().date().strftime('%Y-%m-%d')
         msg = await safe_send_message(bot, callback,
                                       text="Список формируется, пожалуйста подождите, это займет пару минут")
         url = f'https://seller-analytics-api.wildberries.ru/api/v1/paid_storage?dateFrom={date_to}&dateTo={date_to}'
@@ -495,10 +498,15 @@ async def cmd_spp(callback: CallbackQuery, state: FSMContext):
             await safe_send_message(bot, callback, 'Какая-то ошибка, попробуйте позже')
             await state.clear()
             return
+        if "nmId" not in df.columns:
+            await safe_send_message(bot, callback,
+                                    "Wildberries пока не предоставили выгрузку за сегодня, пожалуйста попробуйте позже")
+            await state.clear()
+            return
         ids = list(int(el) for el in df['nmId'].unique())
 
         to_del = (await safe_send_message(bot, user.id,
-                                          text=f'Ожидаемое время получения - {int(len(ids) * 0.6)} секунд')).message_id
+                                          text=f'Ожидаемое время получения - {int(len(ids) * 1.2)} секунд')).message_id
         spp = await get_spp(ids, user.id)
         if spp.get(0, 1) == 0:
             await safe_send_message(bot, user.id, "Неизвестная ошибка, попробуйте позже")
@@ -512,7 +520,6 @@ async def cmd_spp(callback: CallbackQuery, state: FSMContext):
 async def spp_list(message: Message, state: FSMContext):
     output_format = (await state.get_data()).get('output_format', '')
     input_format = (await state.get_data()).get('input_format', '')
-    data = await state.get_data()
     if input_format == '':
         await safe_send_message(bot, message, 'Какая то ошибка, попробуйте еще раз')
         await state.clear()
@@ -555,7 +562,7 @@ async def spp_list(message: Message, state: FSMContext):
         ids = list(int(el) for el in df['nmId'].unique())
 
     to_del = (await safe_send_message(bot, message,
-                                      text=f'Ожидаемое время получения - {int(len(ids) * 0.6)} секунд')).message_id
+                                      text=f'Ожидаемое время получения - {int(len(ids) * 1.2)} секунд')).message_id
     spp = await get_spp(ids, message.from_user.id)
     if spp.get(0, 1) == 0:
         await safe_send_message(bot, message, "Неизвестная ошибка, попробуйте позже")

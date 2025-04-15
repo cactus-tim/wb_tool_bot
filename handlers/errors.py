@@ -19,11 +19,21 @@ async def global_error_handler(event: Any):
     exception = event.exception
     update = event.update
 
+    # Определяем user_id если возможно
     user_id = (
         update.message.from_user.id
         if update and update.message and update.message.from_user
         else "Unknown"
     )
+
+    # Функция для безопасного получения chat_id из разных типов обновлений
+    def get_chat_id(update):
+        if update and update.message and update.message.chat:
+            return update.message.chat.id
+        elif update and getattr(update, 'callback_query', None) and update.callback_query.message:
+            return update.callback_query.message.chat.id
+        # Можно добавить дополнительные проверки для других типов обновлений, если требуется
+        return None
 
     if isinstance(exception, TelegramBadRequest):
         logger.error(f"Некорректный запрос: {exception}. Пользователь: {user_id}")
@@ -38,7 +48,12 @@ async def global_error_handler(event: Any):
     elif isinstance(exception, TelegramNetworkError):
         logger.error(f"Network error: {exception}")
         await asyncio.sleep(5)
-        await safe_send_message(bot, update.message.chat.id, text="Повторная попытка...")
+
+        chat_id = get_chat_id(update)
+        if chat_id is not None:
+            await safe_send_message(bot, chat_id, text="Повторная попытка...")
+        else:
+            logger.error("Не удалось определить chat_id для отправки сообщения")
         return True
     else:
         logger.exception(f"Неизвестная ошибка: {exception}")
