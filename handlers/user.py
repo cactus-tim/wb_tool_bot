@@ -176,7 +176,7 @@ async def get_spp(ids: list, user_id: int) -> dict:
     return res
 
 
-async def send_spp(user_id: int, spp: dict, output_format: str, to_del: int, msg_id: int = None):
+async def send_spp(user_id: int, spp: dict, output_format: str, to_del: int, msg_id: int = None, df: pd.DataFrame = None):
     if output_format == 'list':
         texts = []
         text, cnt = '', 0
@@ -194,21 +194,38 @@ async def send_spp(user_id: int, spp: dict, output_format: str, to_del: int, msg
         for text in texts:
             await safe_send_message(bot, user_id, text=text)
     elif output_format == 'xlsx':
-        df = pd.DataFrame(list(spp.items()), columns=['ID', 'Value'])
-        with io.BytesIO() as buffer:
-            with pd.ExcelWriter(buffer, engine="xlsxwriter") as writer:
-                df.to_excel(writer, index=False, sheet_name="Sheet1")
-                worksheet = writer.sheets["Sheet1"]
-                for idx, col in enumerate(df.columns):
-                    max_len = max(df[col].astype(str).map(len).max(), len(str(col))) + 2
-                    worksheet.set_column(idx, idx, max_len)
-            buffer.seek(0)
-            temp_file = BufferedInputFile(buffer.read(), filename="report.xlsx")
-            await bot.delete_message(chat_id=user_id, message_id=to_del)
-            if msg_id:
-                await bot.delete_message(chat_id=user_id, message_id=msg_id)
-            await bot.send_document(chat_id=user_id, document=temp_file, caption="Отчет готов",
-                                    reply_markup=get_main_kb())
+        if df is not None:
+            df['Value'] = df['nmId'].map(spp)
+            with io.BytesIO() as buffer:
+                with pd.ExcelWriter(buffer, engine="xlsxwriter") as writer:
+                    df.to_excel(writer, index=False, sheet_name="Sheet1")
+                    worksheet = writer.sheets["Sheet1"]
+                    for idx, col in enumerate(df.columns):
+                        max_len = max(df[col].astype(str).map(len).max(), len(str(col))) + 2
+                        worksheet.set_column(idx, idx, max_len)
+                buffer.seek(0)
+                temp_file = BufferedInputFile(buffer.read(), filename="report.xlsx")
+                await bot.delete_message(chat_id=user_id, message_id=to_del)
+                if msg_id:
+                    await bot.delete_message(chat_id=user_id, message_id=msg_id)
+                await bot.send_document(chat_id=user_id, document=temp_file, caption="Отчет готов",
+                                        reply_markup=get_main_kb())
+        else:
+            df = pd.DataFrame(list(spp.items()), columns=['nmId', 'Value'])
+            with io.BytesIO() as buffer:
+                with pd.ExcelWriter(buffer, engine="xlsxwriter") as writer:
+                    df.to_excel(writer, index=False, sheet_name="Sheet1")
+                    worksheet = writer.sheets["Sheet1"]
+                    for idx, col in enumerate(df.columns):
+                        max_len = max(df[col].astype(str).map(len).max(), len(str(col))) + 2
+                        worksheet.set_column(idx, idx, max_len)
+                buffer.seek(0)
+                temp_file = BufferedInputFile(buffer.read(), filename="report.xlsx")
+                await bot.delete_message(chat_id=user_id, message_id=to_del)
+                if msg_id:
+                    await bot.delete_message(chat_id=user_id, message_id=msg_id)
+                await bot.send_document(chat_id=user_id, document=temp_file, caption="Отчет готов",
+                                        reply_markup=get_main_kb())
 
 
 @router.message(CommandStart())
@@ -568,5 +585,8 @@ async def spp_list(message: Message, state: FSMContext):
         await safe_send_message(bot, message, "Неизвестная ошибка, попробуйте позже")
         await state.clear()
         return
-    await send_spp(message.from_user.id, spp, output_format, to_del)
+    if input_format == 'xlsx':
+        await send_spp(message.from_user.id, spp, output_format, to_del, df=df)
+    else:
+        await send_spp(message.from_user.id, spp, output_format, to_del)
     await state.clear()
