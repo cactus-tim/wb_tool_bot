@@ -1,8 +1,9 @@
 from datetime import datetime
 
-from sqlalchemy import Column, Integer, String, Boolean, ARRAY, BigInteger, ForeignKey, Numeric, JSON, Date
+from sqlalchemy import Column, Integer, String, Boolean, ARRAY, BigInteger, ForeignKey, Numeric, JSON, Date, Enum
 from sqlalchemy.orm import DeclarativeBase, relationship
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncAttrs
+from enum import Enum as PyEnum
 
 from instance import SQL_URL_RC
 
@@ -18,8 +19,34 @@ class User(Base):
     __tablename__ = "user"
 
     id = Column(BigInteger, primary_key=True, index=True, nullable=False)
-    api_key = Column(String, default=None)
+    cur_uric = Column(String, default=None)
     is_superuser = Column(Boolean, default=False)
+
+
+class SubsribeStatus(PyEnum):
+    INACTIVE = "inactive"
+
+
+class Uric(Base):
+    __tablename__ = "uric"
+
+    name = Column(String, primary_key=True, index=True)
+    owner_id = Column(BigInteger, ForeignKey("user.id"), nullable=False)
+    api_key = Column(String, default=None)
+    subsribe = Column(Enum(SubsribeStatus, name='subsribe_status'), default=SubsribeStatus.INACTIVE)
+
+    user = relationship("User", back_populates="uric")
+
+
+class UserXUric(Base):
+    __tablename__ = "user_x_uric"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(BigInteger, ForeignKey("user.id"), nullable=False)
+    uric_id = Column(String, ForeignKey("uric.name"), nullable=False)
+
+    user = relationship("User", back_populates="user_x_uric")
+    uric = relationship("Uric", back_populates="user_x_uric")
 
 
 async def async_main():

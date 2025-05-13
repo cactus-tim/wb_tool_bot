@@ -9,15 +9,6 @@ def get_cancel_ikb() -> InlineKeyboardMarkup:
     return ikeyboard
 
 
-def get_app_ikb() -> InlineKeyboardMarkup:
-    ikb = [
-        [InlineKeyboardButton(text="Добавить СПП", callback_data="spp:yes"),
-         InlineKeyboardButton(text="Без СПП", callback_data="spp:no")],
-    ]
-    ikeyboard = InlineKeyboardMarkup(inline_keyboard=ikb)
-    return ikeyboard
-
-
 def get_input_format_ikb() -> InlineKeyboardMarkup:
     ikb = [
         [InlineKeyboardButton(text="Список артикулов", callback_data="type_input_spp:list")],
@@ -45,9 +36,41 @@ def get_some_kb() -> ReplyKeyboardMarkup:
     return keyboard
 
 
-def get_main_kb() -> ReplyKeyboardMarkup:
+def get_main_kb(cur_uric: str) -> ReplyKeyboardMarkup:
     keyboard = ReplyKeyboardMarkup(
-        keyboard=[[KeyboardButton(text='Добавить ключ')], [KeyboardButton(text='Получить отчет')], [KeyboardButton(text='Получить SPP')]],
+        keyboard=[[KeyboardButton(text='Создать Юр лицо')], [KeyboardButton(text='Выбрать Юр лицо')]],
+        resize_keyboard=True
+    )
+    if cur_uric:
+        keyboard.keyboard.append([KeyboardButton(text=f'Продолжить с {cur_uric}')])
+    return keyboard
+
+
+def get_func_kb() -> ReplyKeyboardMarkup:
+    keyboard = ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text='Получить отчет')],
+                  [KeyboardButton(text='Получить СПП')],
+                  [KeyboardButton(text='Настройки Юр лица')],
+                  [KeyboardButton(text='Назад в главное меню')]],
         resize_keyboard=True
     )
     return keyboard
+
+
+def get_settings_kb(is_owner: bool) -> ReplyKeyboardMarkup:
+    if is_owner:
+        keyboard = ReplyKeyboardMarkup(
+            keyboard=[[KeyboardButton(text='Сменить API ключ')]],
+            resize_keyboard=True
+        )
+    else:
+        keyboard = ReplyKeyboardMarkup(
+            keyboard=[[]],
+            resize_keyboard=True
+        )
+    keyboard.keyboard.append([KeyboardButton(text='Статус оплаты')])
+    keyboard.keyboard.append([KeyboardButton(text='Оплатить')])
+    keyboard.keyboard.append([KeyboardButton(text='Добавить сотрудника')])
+    keyboard.keyboard.append([KeyboardButton(text='Назад')])
+    return keyboard
+

@@ -4,7 +4,7 @@ from aiogram import Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
 
 from confige import BotConfig
-from handlers import errors, user
+from handlers import errors, user_nu
 from instance import bot
 from database.models import async_main
 
