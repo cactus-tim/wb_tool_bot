@@ -8,15 +8,15 @@ import pandas as pd
 import time
 
 from handlers.errors import safe_send_message
-from keyboards.keyboards import get_main_kb
+from keyboards.keyboards import get_main_kb, get_func_kb
 from instance import bot, logger
 from database.req import *
 
 
 async def fetch_data(task_id, headers, bot, msg, user, max_retries=3):
     """
-    Внутренняя функция для получения данных с API Wildberries с обработкой ошибок и повторными попытками.
-    Предусматривает сложную обработку длинных запросов
+    Внутренняя функция для получения данных с API Wildberries с обработкой ошибок и повторными попытками,
+    в том числе при кодах ответа != 200.
 
     :param task_id: номер задачи в системе Wildberries
     :param headers: заголовки для запроса
@@ -24,52 +24,60 @@ async def fetch_data(task_id, headers, bot, msg, user, max_retries=3):
     :param msg: сообщение, которое нужно удалить после завершения
     :param user: пользователь, которому отправляется сообщение об ошибке
     :param max_retries: максимальное кол-во попыток
-    :return: json с данными
+    :return: json с данными или None
     """
     url = f'https://seller-analytics-api.wildberries.ru/api/v1/paid_storage/tasks/{task_id}/download'
-    await asyncio.sleep(70)
 
     for attempt in range(max_retries):
+        # задержка перед запросом: 10 с. перед первой, 70 с. перед последующими
+        await asyncio.sleep(10 if attempt == 0 else 70)
+
         try:
-            # Запрос с включённым потоковым режимом и заданием таймаута
             response = requests.get(url, headers=headers, stream=True, timeout=(5, 30))
 
             if response.status_code != 200:
+                # если не последний заход — повторяем
+                if attempt < max_retries - 1:
+                    continue
+                # если последняя попытка — сообщаем об ошибке и выходим
                 try:
                     error_data = response.json()
                 except Exception:
                     error_data = response.text
-                await safe_send_message(bot, user.id, text=f"Ошибка при запросе {response.status_code}: {error_data}")
+                await safe_send_message(bot, user.id, text=f"Ошибка при запросе {response.status_code}: {error_data}",
+                                        reply_markup=get_func_kb())
                 await bot.delete_message(chat_id=user.id, message_id=msg.message_id)
                 return None
 
-            # Определяем, используется ли chunked transfer encoding
+            # успешный ответ — разбираем тело
             if 'chunked' in response.headers.get('Transfer-Encoding', '').lower():
                 content_bytes = b""
-                # Читаем данные по частям с обработкой чанков
                 for chunk in response.iter_content(chunk_size=8192):
                     if chunk:
                         content_bytes += chunk
                 data = json.loads(content_bytes.decode('utf-8'))
             else:
-                # Если данные передаются целиком
                 data = response.json()
 
             return data
 
         except requests.exceptions.ChunkedEncodingError as e:
-            # Если произошла ошибка чтения чанков, повторяем попытку
             if attempt < max_retries - 1:
-                time.sleep(2)  # небольшая задержка перед повторной попыткой
+                time.sleep(2)
                 continue
-            else:
-                await safe_send_message(bot, user.id, text=f"Ошибка соединения при получении чанков: {e}")
-                await bot.delete_message(chat_id=user.id, message_id=msg.message_id)
-                return None
-        except Exception as e:
-            await safe_send_message(bot, user.id, text=f"Произошла ошибка: {e}")
+            await safe_send_message(bot, user.id, text=f"Ошибка соединения при получении чанков: {e}",
+                                    reply_markup=get_func_kb())
             await bot.delete_message(chat_id=user.id, message_id=msg.message_id)
             return None
+
+        except Exception as e:
+            # любая другая непредвиденная ошибка — не пытаемся повторить
+            await safe_send_message(bot, user.id, text=f"Произошла ошибка: {e}", reply_markup=get_func_kb())
+            await bot.delete_message(chat_id=user.id, message_id=msg.message_id)
+            return None
+
+    # все попытки исчерпаны без успешного ответа
+    return None
 
 
 async def get_all_ids(user_id: int, return_dict: bool = False):
@@ -86,7 +94,7 @@ async def get_all_ids(user_id: int, return_dict: bool = False):
     if not user:
         logger.exception(f"Uncorrect user data")
         return res
-    key = user.api_key
+    key = (await get_uric(user.cur_uric)).api_key
     headers = {
         'Authorization': f'Bearer {key}'
     }
@@ -97,22 +105,24 @@ async def get_all_ids(user_id: int, return_dict: bool = False):
             response = requests.get(url, headers=headers)
         except requests.exceptions.RequestException as e:
             logger.exception(f"Ошибка при запросе к {url}:\n{e}")
-            await safe_send_message(bot, user_id, 'Ошибка при получении СПП')
+            await safe_send_message(bot, user_id, 'Ошибка при получении СПП', reply_markup=get_func_kb())
             return res
         if response.status_code != 200:
             if response.status_code == 401:
                 logger.exception("Пользователь не авторизован (401).")
-                await safe_send_message(bot, user_id, 'Ошибка при получении СПП, ващ ключ устарел, укажите новый')
+                await safe_send_message(bot, user_id, 'Ошибка при получении СПП, ващ ключ устарел, укажите новый',
+                                        reply_markup=get_func_kb())
             elif response.status_code == 429:
                 logger.exception("Слишком много запросов (429).")
-                await safe_send_message(bot, user_id, 'Ошибка при получении СПП, попробуйте позже')
+                await safe_send_message(bot, user_id, 'Ошибка при получении СПП, попробуйте позже',
+                                        reply_markup=get_func_kb())
             else:
                 logger.exception(f"Неожиданный статус код: {response.status_code}")
-                await safe_send_message(bot, user_id, 'Ошибка при получении СПП')
+                await safe_send_message(bot, user_id, 'Ошибка при получении СПП', reply_markup=get_func_kb())
             return res
         df = pd.DataFrame(response.json()['data']['listGoods'])
 
-        part_res = [int(row['sizes'][0].get('discountedPrice')) for _, row in df.iterrows()]
+        part_res = [int(row['nmID']) for _, row in df.iterrows()]
         part_all = {int(row['nmID']): int(row['sizes'][0].get('discountedPrice')) for _, row in df.iterrows()}
         if not part_res:
             break
@@ -142,12 +152,13 @@ async def get_spp(ids: list, user_id: int) -> dict:
     if not user:
         logger.exception(f"Uncorrect user data")
         return res
-    key = user.api_key
+    key = (await get_uric(user.cur_uric)).api_key
     headers = {
         'Authorization': f'Bearer {key}'
     }
     start_time = time.perf_counter()
-    good, retry, all = [], [], await get_all_ids(user_id, return_dict=True)
+    good, retry = [], []
+    all = await get_all_ids(user_id, return_dict=True)
     for el in ids:
         if el in all.keys():
             url = f'https://card.wb.ru/cards/v2/detail?appType=1&curr=rub&dest=-3339985&hide_dtype=13&spp=30&ab_testing=false&lang=ru&nm={el}'
@@ -167,7 +178,7 @@ async def get_spp(ids: list, user_id: int) -> dict:
                 except Exception as e:
                     res[el] = 'Товара нет в наличии'
                     continue
-                res[el] = 100 - int((after / before) * 100)
+                res[el] = 100 - int((after / before) * 100) if (100 - int((after / before) * 100)) > 0 and after != 0 else 0
             else:
                 res[el] = 'Не удалось получить СПП'
         else:
@@ -217,7 +228,7 @@ async def get_spp(ids: list, user_id: int) -> dict:
                 except Exception as e:
                     res[el] = 'Товара нет в наличии'
                     continue
-                res[el] = 100 - int((after / before) * 100) if after != 0 else 0
+                res[el] = 100 - int((after / before) * 100) if (100 - int((after / before) * 100)) > 0 and after != 0 else 0
             else:
                 res[el] = 'Не удалось получить СПП'
         cur_timer = time.perf_counter() - start_time
@@ -253,7 +264,7 @@ async def send_spp(user_id: int, spp: dict, output_format: str, to_del: int, msg
         if msg_id:
             await bot.delete_message(chat_id=user_id, message_id=msg_id)
         for text in texts:
-            await safe_send_message(bot, user_id, text=text)
+            await safe_send_message(bot, user_id, text=text, reply_markup=get_func_kb())
     elif output_format == 'xlsx':
         if df is not None:
             df['Value'] = df['nmId'].map(spp)
@@ -286,4 +297,4 @@ async def send_spp(user_id: int, spp: dict, output_format: str, to_del: int, msg
                 if msg_id:
                     await bot.delete_message(chat_id=user_id, message_id=msg_id)
                 await bot.send_document(chat_id=user_id, document=temp_file, caption="Отчет готов",
-                                        reply_markup=get_main_kb())
+                                        reply_markup=get_func_kb())

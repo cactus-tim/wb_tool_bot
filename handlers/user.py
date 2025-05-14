@@ -116,3 +116,16 @@ async def back_to_func_menu(message: Message):
         ),
         reply_markup=get_func_kb()
     )
+
+
+@router.callback_query(lambda c: c.data and c.data.startswith("cancel"))
+async def cancel(callback: CallbackQuery, state: FSMContext):
+    await callback.answer()
+    reply_kb = callback.data.split(':')[1]
+    if reply_kb == 'func':
+        await safe_send_message(bot, callback, 'Отменено', reply_markup=get_func_kb())
+    elif reply_kb == 'main':
+        await safe_send_message(bot, callback, 'Отменено', reply_markup=get_main_kb((await get_user(callback.from_user.id)).cur_uric))
+    elif reply_kb == 'settings':
+        await safe_send_message(bot, callback, 'Отменено', reply_markup=get_settings_kb((await get_uric((await get_user(callback.from_user.id)).cur_uric)).owner_id == callback.from_user.id))
+    await state.clear()

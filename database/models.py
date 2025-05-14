@@ -19,7 +19,7 @@ class User(Base):
     __tablename__ = "user"
 
     id = Column(BigInteger, primary_key=True, index=True, nullable=False)
-    cur_uric = Column(String, default=None)
+    cur_uric = Column(String, default='')
     is_superuser = Column(Boolean, default=False)
 
 

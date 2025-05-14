@@ -1,9 +1,10 @@
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton
+from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 
-def get_cancel_ikb() -> InlineKeyboardMarkup:
+def get_cancel_ikb(reply_kb: str) -> InlineKeyboardMarkup:
     ikb = [
-        [InlineKeyboardButton(text="Отмена", callback_data="cancel")],
+        [InlineKeyboardButton(text="Отмена", callback_data=f"cancel:{reply_kb}")],
     ]
     ikeyboard = InlineKeyboardMarkup(inline_keyboard=ikb)
     return ikeyboard
@@ -26,6 +27,18 @@ def get_output_format_ikb() -> InlineKeyboardMarkup:
     ]
     ikeyboard = InlineKeyboardMarkup(inline_keyboard=ikb)
     return ikeyboard
+
+
+def get_urics_ikb(urics: list) -> InlineKeyboardMarkup:
+    """
+    Формирует InlineKeyboardMarkup из списка строк urics,
+    группируя кнопки по 3 в строке (aiogram 3.x).
+    """
+    builder = InlineKeyboardBuilder()
+    for uri in urics:
+        builder.button(text=uri, callback_data=f"uric:{uri}")
+    builder.adjust(3)
+    return builder.as_markup()
 
 
 def get_some_kb() -> ReplyKeyboardMarkup:
