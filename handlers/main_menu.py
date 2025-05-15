@@ -39,7 +39,9 @@ async def get_uric_name(message: Message, state: FSMContext):
         return
 
     await state.update_data(uric_name=message.text)
-    await safe_send_message(bot, message, "Введите API ключ", reply_markup=get_cancel_ikb('main'))
+    link = "https://blog-promopult-ru.turbopages.org/turbo/blog.promopult.ru/s/marketplejsy/api-klyuch-wildberries.html"
+    await safe_send_message(bot, message, "Введите API ключ\n<a href=\"{link}\">Как получить ключ?</a>\n",
+                            reply_markup=get_cancel_ikb('main'))
     await state.set_state(CreateUric.api_key)
 
 
@@ -60,6 +62,7 @@ async def get_uric_api_key(message: Message, state: FSMContext):
     if response.status_code == 200:
         await create_uric(uric_name, message.from_user.id, api_key)
         await update_user(message.from_user.id, uric_name)
+        await add_user_uric(message.from_user.id, uric_name)
         await safe_send_message(bot, message, "Юр лицо успешно создано", reply_markup=get_main_kb(uric_name))
         await state.clear()
     elif response.status_code == 401:

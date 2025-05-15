@@ -1,6 +1,9 @@
+import datetime
+from typing import Optional
+
 from sqlalchemy import select, desc, distinct, and_
 
-from database.models import User, async_session, Uric, UserXUric
+from database.models import User, async_session, Uric, UserXUric, SubsribeStatus
 from errors.errors import *
 from handlers.errors import db_error_handler
 
@@ -81,6 +84,19 @@ async def update_uric(name: str, api_key: str):
 
 
 @db_error_handler
+async def pay_sub(name: str, subsribe: SubsribeStatus, exp_date: datetime.date | None):
+    async with async_session() as session:
+        uric = await get_uric(name)
+        if uric:
+            uric.subsribe = subsribe
+            uric.exp_date = exp_date
+            session.add(uric)
+            await session.commit()
+        else:
+            raise Error404
+
+
+@db_error_handler
 async def get_uric_by_owner(owner_id: int):
     async with async_session() as session:
         uric = await session.scalars(select(Uric).where(Uric.owner_id == owner_id))
@@ -91,11 +107,12 @@ async def get_uric_by_owner(owner_id: int):
 
 
 @db_error_handler
-async def get_user_uric(user_id: int):
+async def get_user_uric(user_id: int, uric_id: str):
     async with async_session() as session:
-        user_uric = await session.scalars(select(UserXUric).where(UserXUric.user_id == user_id))
+        user_uric = await session.scalar(select(UserXUric).where(and_(UserXUric.user_id == user_id,
+                                                                      UserXUric.uric_id == uric_id)))
         if user_uric:
-            return user_uric.all()
+            return user_uric
         else:
             return None
 

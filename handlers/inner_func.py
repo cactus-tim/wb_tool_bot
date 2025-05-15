@@ -99,6 +99,7 @@ async def get_all_ids(user_id: int, return_dict: bool = False):
         'Authorization': f'Bearer {key}'
     }
     offset = 0
+    # бежим в цикле и забираем все товары которые есть у продавца, оставляем либо артикулы, либо артикулы и цены
     while True:
         url = f"https://discounts-prices-api.wildberries.ru/api/v2/list/goods/filter?limit=1000&offset={offset}"
         try:
@@ -158,10 +159,13 @@ async def get_spp(ids: list, user_id: int) -> dict:
     }
     start_time = time.perf_counter()
     good, retry = [], []
+    # для начала получаем все товары с ценами, которые есть у юр лица
     all = await get_all_ids(user_id, return_dict=True)
+    # дальше для каждого найденного товара сразу достаем реальнуб цену на вб, а все, чьи цены не нашли, кидаем в список для повторного прохода
     for el in ids:
         if el in all.keys():
-            url = f'https://card.wb.ru/cards/v2/detail?appType=1&curr=rub&dest=-3339985&hide_dtype=13&spp=30&ab_testing=false&lang=ru&nm={el}'
+            url = (f'https://card.wb.ru/cards/v2/detail?appType=1&curr=rub&dest='
+                   f'-3339985&hide_dtype=13&spp=30&ab_testing=false&lang=ru&nm={el}')
             try:
                 response = requests.get(url)
             except requests.exceptions.RequestException as e:
@@ -174,7 +178,8 @@ async def get_spp(ids: list, user_id: int) -> dict:
                 continue
             if response.status_code == 200:
                 try:
-                    after = int(response.json()['data']['products'][0]['sizes'][0]['price']['total'] / 100)  # TODO: her problem too (set of sizes)
+                    after = int(response.json()['data']['products'][0]['sizes'][0]['price']['total'] / 100)
+                    # TODO: her problem too (set of sizes)
                 except Exception as e:
                     res[el] = 'Товара нет в наличии'
                     continue
@@ -186,6 +191,8 @@ async def get_spp(ids: list, user_id: int) -> dict:
     cur_timer = time.perf_counter() - start_time
     if cur_timer <= 10:
         await asyncio.sleep(10 - cur_timer)
+    # если остались товары, которые не нашли в базе, то делаем запросы к ним (вб апи + цена на сайте),
+    # бьем на чанки что бы не было 429
     chunks = [retry[i:i + 6] for i in range(0, len(retry), 6)]
     for chunk in chunks:
         start_time = time.perf_counter()
@@ -206,7 +213,8 @@ async def get_spp(ids: list, user_id: int) -> dict:
                     logger.exception(f"Неожиданный статус код: {response.status_code} для {el}")
                 res[el] = 'Не удалось получить СПП'
                 continue
-            url1 = f'https://card.wb.ru/cards/v2/detail?appType=1&curr=rub&dest=-3339985&hide_dtype=13&spp=30&ab_testing=false&lang=ru&nm={el}'
+            url1 = (f'https://card.wb.ru/cards/v2/detail?appType=1&curr=rub&dest=-'
+                    f'3339985&hide_dtype=13&spp=30&ab_testing=false&lang=ru&nm={el}')
             try:
                 response1 = requests.get(url1, headers={})
             except requests.exceptions.RequestException as e:
@@ -228,7 +236,8 @@ async def get_spp(ids: list, user_id: int) -> dict:
                 except Exception as e:
                     res[el] = 'Товара нет в наличии'
                     continue
-                res[el] = 100 - int((after / before) * 100) if (100 - int((after / before) * 100)) > 0 and after != 0 else 0
+                res[el] = 100 - int((after / before) * 100) if (100 - int((after / before) * 100)) > 0 and after != 0 \
+                    else 0
             else:
                 res[el] = 'Не удалось получить СПП'
         cur_timer = time.perf_counter() - start_time
@@ -281,7 +290,7 @@ async def send_spp(user_id: int, spp: dict, output_format: str, to_del: int, msg
                 if msg_id:
                     await bot.delete_message(chat_id=user_id, message_id=msg_id)
                 await bot.send_document(chat_id=user_id, document=temp_file, caption="Отчет готов",
-                                        reply_markup=get_main_kb())
+                                        reply_markup=get_main_kb((await get_user(user_id)).cur_uric))
         else:
             df = pd.DataFrame(list(spp.items()), columns=['nmId', 'Value'])
             with io.BytesIO() as buffer:

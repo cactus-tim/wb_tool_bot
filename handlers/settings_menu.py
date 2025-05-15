@@ -1,29 +1,92 @@
-import asyncio
-import datetime
-import json
-import re
-import tempfile
-
-from aiogram.filters import Command, CommandStart, StateFilter
-from aiogram import Router, F, types
-from aiogram.types import Message, CallbackQuery, BufferedInputFile
+from aiogram import Router, F
+from aiogram.types import Message
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 import requests
-import io
-import pandas as pd
-import time
 
 from handlers.errors import safe_send_message
-from handlers.inner_func import fetch_data, get_spp, send_spp, get_all_ids
-from keyboards.keyboards import get_cancel_ikb, get_input_format_ikb, get_output_format_ikb, get_main_kb
-from instance import bot, logger
+from keyboards.keyboards import get_cancel_ikb, get_settings_kb
+from instance import bot
 from database.req import *
 
 router = Router()
 
 
-# @router.message(F.text == 'Сменить API ключ')
-# @router.message(F.text == 'Статус оплаты')
-# @router.message(F.text == 'Оплатить')
-# @router.message(F.text == 'Добавить сотрудника')
+class ChangeApiKey(StatesGroup):
+    change_api_key = State()
+
+
+@router.message(F.text == 'Сменить API ключ')
+async def change_api_key_start(message: Message, state: FSMContext):
+    """
+    Функция для смены API ключа.
+    """
+    link = "https://blog-promopult-ru.turbopages.org/turbo/blog.promopult.ru/s/marketplejsy/api-klyuch-wildberries.html"
+    await message.answer(f"Введите новый API ключ:\n<a href=\"{link}\">Как получить ключ?</a>\n",
+                         reply_markup=get_cancel_ikb('settings'))
+    await state.set_state(ChangeApiKey.change_api_key)
+
+
+@router.message(ChangeApiKey.change_api_key)
+async def change_api_key(message: Message, state: FSMContext):
+    """
+    Функция для смены API ключа.
+    """
+    new_api_key = message.text
+    tg_id = message.from_user.id
+
+    user = await get_user(tg_id)
+    uric = await get_uric(user.cur_uric)
+
+    if uric.api_key == new_api_key:
+        await message.answer("Этот API ключ уже установлен", reply_markup=get_settings_kb(uric.owner_id == tg_id))
+        return
+
+    url = 'https://common-api.wildberries.ru/ping'
+    headers = {
+        'Authorization': f'Bearer {new_api_key}'
+    }
+    response = requests.get(url, headers=headers)
+    if response.status_code == 200:
+        await update_uric(user.cur_uric, new_api_key)
+        await message.answer("API ключ успешно изменен", reply_markup=get_settings_kb(uric.owner_id == tg_id))
+        await state.clear()
+    elif response.status_code == 401:
+        await safe_send_message(bot, message, text="Недействительный ключ, попробуйте еще раз",
+                                reply_markup=get_cancel_ikb('settings'))
+    else:
+        await safe_send_message(bot, message, text="Ошибка при запросе", reply_markup=get_cancel_ikb('settings'))
+
+
+@router.message(F.text == 'Статус оплаты')
+async def status_payment(message: Message):
+    """
+    Функция для получения статуса оплаты.
+    """
+    user = await get_user(message.from_user.id)
+    uric = await get_uric(user.cur_uric)
+    text = (f"Статус подписки по юр. лицу {uric.name}:\n"
+            f"Подпсика - {uric.subscription}\n"
+            f"Дата окончания подписки - {uric.exp_date}\n")
+    await safe_send_message(bot, message, text=text, reply_markup=get_settings_kb(uric.owner_id == user.id))
+
+
+@router.message(F.text == 'Оплатить')
+async def cmd_pay(message: Message):
+    """
+    Функция для получения ссылки на оплату.
+    """
+    await safe_send_message(bot, message, "Напишите сюда @If9090",
+                            reply_markup=get_settings_kb((await get_uric(
+                                (await get_user(message.from_user.id)).cur_uric)).owner_id == message.from_user.id))
+
+
+@router.message(F.text == 'Добавить сотрудника')
+async def add_employee(message: Message):
+    """
+    Функция для добавления сотрудника.
+    """
+    cur_uric = (await get_user(message.from_user.id)).cur_uric
+    url = f'https://t.me/?start={cur_uric}'  # TODO: add bot name
+    await safe_send_message(bot, message, f"Отправьте эту сслыку сотруднику {url}",
+                            reply_markup=get_settings_kb((await get_uric(cur_uric)).owner_id == message.from_user.id))

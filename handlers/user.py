@@ -4,7 +4,7 @@ import json
 import re
 import tempfile
 
-from aiogram.filters import Command, CommandStart, StateFilter
+from aiogram.filters import Command, CommandStart, StateFilter, CommandObject
 from aiogram import Router, F, types
 from aiogram.types import Message, CallbackQuery, BufferedInputFile
 from aiogram.fsm.context import FSMContext
@@ -24,31 +24,55 @@ from database.req import *
 router = Router()
 
 
-@router.message(CommandStart())  # TODO: add diplink
-async def cmd_start(message: Message):
+@router.message(CommandStart())
+async def cmd_start(message: Message, command: CommandObject):
     """
     Обработчик команды /start. Проверяет наличие пользователя в базе данных и отправляет приветственное сообщение.
     """
+    hash_value = command.args
     user = await get_user(message.from_user.id)
-    if not user:
-        await create_user(message.from_user.id)
-    await safe_send_message(bot, message, text="Привет! Это бот для автоматизации работы с Wildberries. "
-                                               "Мы поможем тебе упростить работу с этой платформой.\n"
-                                               "Для начала используй <pre><code>/help</code></pre>")
+    if hash_value:
+        if not user:
+            await create_user(message.from_user.id)
+        uric = await get_uric(hash_value)
+        if not uric:
+            await safe_send_message(bot, message, text='Привет, ссылка недействительна, обратитесь к отправителю')
+            return
+        await update_user(message.from_user.id, hash_value)
+        user_uric = await get_user_uric(message.from_user.id, hash_value)
+        if user_uric:
+            await safe_send_message(bot, message, text='Привет, вы уже добавлены в компанию')
+            return
+        await add_user_uric(message.from_user.id, hash_value)
+        await safe_send_message(bot, message, text=f"Привет, вы добавлены как сотрудник компании {hash_value}.\n",
+                                reply_markup=get_main_kb(hash_value))
+    else:
+        if not user:
+            await create_user(message.from_user.id)
+        await safe_send_message(bot, message, text="Привет! Это бот для автоматизации работы с Wildberries. "
+                                                   "Мы поможем тебе упростить работу с этой платформой.\n"
+                                                   "Что бы получше познакомится с нами используй "
+                                                   "<pre><code>/info</code></pre>\n"
+                                                   "А что бы начать использование <pre><code>/help</code></pre>")
+
+
+@router.message(Command('info'))
+async def cmd_info(message: Message):
+    """
+    Обработчик команды /info. Отправляет пользователю информацию о боте и его функционале.
+    """
+    await safe_send_message(bot, message, text='Какая то инфа про подписки и нашу миссию')
 
 
 @router.message(Command('help'))
-async def cmd_info(message: Message):
+async def cmd_help(message: Message):
     """
     Обработчик команды /help. Отправляет пользователю информацию о боте и его функционале.
     """
-    link = "https://blog-promopult-ru.turbopages.org/turbo/blog.promopult.ru/s/marketplejsy/api-klyuch-wildberries.html"
     cur_uric = (await get_user(message.from_user.id)).cur_uric
     await safe_send_message(
         bot, message,
-        text=(
-              f"<a href=\"{link}\">Как получить ключ?</a>\n"
-              ),
+        text="Тут тоже какая то инфа про использование",
         reply_markup=get_main_kb(cur_uric)
     )
 
@@ -125,7 +149,11 @@ async def cancel(callback: CallbackQuery, state: FSMContext):
     if reply_kb == 'func':
         await safe_send_message(bot, callback, 'Отменено', reply_markup=get_func_kb())
     elif reply_kb == 'main':
-        await safe_send_message(bot, callback, 'Отменено', reply_markup=get_main_kb((await get_user(callback.from_user.id)).cur_uric))
+        await safe_send_message(bot, callback, 'Отменено',
+                                reply_markup=get_main_kb((await get_user(callback.from_user.id)).cur_uric))
     elif reply_kb == 'settings':
-        await safe_send_message(bot, callback, 'Отменено', reply_markup=get_settings_kb((await get_uric((await get_user(callback.from_user.id)).cur_uric)).owner_id == callback.from_user.id))
+        await safe_send_message(bot, callback, 'Отменено',
+                                reply_markup=get_settings_kb(
+                                    (await get_uric((await get_user(callback.from_user.id)).cur_uric)).owner_id ==
+                                    callback.from_user.id))
     await state.clear()

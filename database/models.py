@@ -25,6 +25,7 @@ class User(Base):
 
 class SubsribeStatus(PyEnum):
     INACTIVE = "inactive"
+    ACTIVE = "active"
 
 
 class Uric(Base):
@@ -34,6 +35,7 @@ class Uric(Base):
     owner_id = Column(BigInteger, ForeignKey("user.id"), nullable=False)
     api_key = Column(String, default=None)
     subsribe = Column(Enum(SubsribeStatus, name='subsribe_status'), default=SubsribeStatus.INACTIVE)
+    exp_date = Column(Date, nullable=True, default=None)
 
     user = relationship("User", back_populates="uric")
 
