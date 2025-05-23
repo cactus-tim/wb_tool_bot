@@ -1,8 +1,9 @@
 from aiogram import Router, F
-from aiogram.types import Message, CallbackQuery
+from aiogram.types import Message, CallbackQuery, ReplyKeyboardRemove, FSInputFile
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 import requests
+import os
 
 from handlers.errors import safe_send_message
 from keyboards.keyboards import get_cancel_ikb, get_main_kb, get_urics_ikb
@@ -22,6 +23,8 @@ async def create_uric_cmd(message: Message, state: FSMContext):
     """
     Обработчик команды создания юр лица.
     """
+    msg = await safe_send_message(bot, message, 'Загрузка...', reply_markup=ReplyKeyboardRemove())
+    await msg.delete()
     await safe_send_message(bot, message, "Введите название Юр лица\n"
                                           "Учтите, что все названия должны быть уникальными",
                             reply_markup=get_cancel_ikb('main'))
@@ -40,7 +43,7 @@ async def get_uric_name(message: Message, state: FSMContext):
 
     await state.update_data(uric_name=message.text)
     link = "https://blog-promopult-ru.turbopages.org/turbo/blog.promopult.ru/s/marketplejsy/api-klyuch-wildberries.html"
-    await safe_send_message(bot, message, "Введите API ключ\n<a href=\"{link}\">Как получить ключ?</a>\n",
+    await safe_send_message(bot, message, f"Введите новый API ключ:\n<a href=\"{link}\">Как получить ключ?</a>\n",
                             reply_markup=get_cancel_ikb('main'))
     await state.set_state(CreateUric.api_key)
 
@@ -52,13 +55,18 @@ async def get_uric_api_key(message: Message, state: FSMContext):
     """
     data = await state.get_data()
     uric_name = data.get('uric_name')
-    api_key = message.text
+    api_key = message.text.strip().replace('\n', '').replace('\r', '')
 
     url = 'https://common-api.wildberries.ru/ping'
     headers = {
         'Authorization': f'Bearer {api_key}'
     }
-    response = requests.get(url, headers=headers)
+    try:
+        response = requests.get(url, headers=headers)
+    except Exception:
+        await safe_send_message(bot, message, 'Некорректный API ключ.\nПопробуйте еше раз',
+                                reply_markup=get_cancel_ikb('main'))
+        return
     if response.status_code == 200:
         await create_uric(uric_name, message.from_user.id, api_key)
         await update_user(message.from_user.id, uric_name)
@@ -95,3 +103,11 @@ async def choose_uric(callback: CallbackQuery):
     await update_user(callback.from_user.id, uric_name)
     await safe_send_message(bot, callback.message, "Юр лицо выбрано", reply_markup=get_main_kb(uric_name))
     await callback.answer()
+
+
+@router.message(F.text == 'Полная инструкция')
+async def send_instructions_file(message: Message):
+    file_path = os.path.join(os.getcwd(), "instructions.docs")
+    instructions_file = FSInputFile(file_path, filename="instructions.docs")
+    await message.answer_document(instructions_file, caption="Вот файл с инструкцией.")
+

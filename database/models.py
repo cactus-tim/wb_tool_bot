@@ -36,8 +36,7 @@ class Uric(Base):
     api_key = Column(String, default=None)
     subsribe = Column(Enum(SubsribeStatus, name='subsribe_status'), default=SubsribeStatus.INACTIVE)
     exp_date = Column(Date, nullable=True, default=None)
-
-    user = relationship("User", back_populates="uric")
+    hash = Column(String, nullable=False)
 
 
 class UserXUric(Base):
@@ -46,9 +45,6 @@ class UserXUric(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(BigInteger, ForeignKey("user.id"), nullable=False)
     uric_id = Column(String, ForeignKey("uric.name"), nullable=False)
-
-    user = relationship("User", back_populates="user_x_uric")
-    uric = relationship("Uric", back_populates="user_x_uric")
 
 
 async def async_main():

@@ -16,6 +16,7 @@ import time
 
 from handlers.errors import safe_send_message
 from handlers.inner_func import fetch_data, get_spp, send_spp, get_all_ids
+from handlers.texts import text_info
 from keyboards.keyboards import get_cancel_ikb, get_input_format_ikb, get_output_format_ikb, get_main_kb, get_func_kb, \
     get_settings_kb
 from instance import bot, logger
@@ -34,18 +35,18 @@ async def cmd_start(message: Message, command: CommandObject):
     if hash_value:
         if not user:
             await create_user(message.from_user.id)
-        uric = await get_uric(hash_value)
+        uric = await get_uric_by_hash(hash_value)
         if not uric:
             await safe_send_message(bot, message, text='Привет, ссылка недействительна, обратитесь к отправителю')
             return
-        await update_user(message.from_user.id, hash_value)
-        user_uric = await get_user_uric(message.from_user.id, hash_value)
+        await update_user(message.from_user.id, uric.name)
+        user_uric = await get_user_uric(message.from_user.id, uric.name)
         if user_uric:
             await safe_send_message(bot, message, text='Привет, вы уже добавлены в компанию')
             return
-        await add_user_uric(message.from_user.id, hash_value)
-        await safe_send_message(bot, message, text=f"Привет, вы добавлены как сотрудник компании {hash_value}.\n",
-                                reply_markup=get_main_kb(hash_value))
+        await add_user_uric(message.from_user.id, uric.name)
+        await safe_send_message(bot, message, text=f"Привет, вы добавлены как сотрудник компании {uric.name}.\n",
+                                reply_markup=get_main_kb(uric.name))
     else:
         if not user:
             await create_user(message.from_user.id)
@@ -61,7 +62,7 @@ async def cmd_info(message: Message):
     """
     Обработчик команды /info. Отправляет пользователю информацию о боте и его функционале.
     """
-    await safe_send_message(bot, message, text='Какая то инфа про подписки и нашу миссию')
+    await safe_send_message(bot, message, text=text_info)
 
 
 @router.message(Command('help'))
@@ -72,7 +73,8 @@ async def cmd_help(message: Message):
     cur_uric = (await get_user(message.from_user.id)).cur_uric
     await safe_send_message(
         bot, message,
-        text="Тут тоже какая то инфа про использование",
+        text="Ты попал в главное меню, тут ты можешь выбрать от какого юр лица будешь работать, "
+             "а если у тебя ещё их нет, то можешь создать!\nВ одной из кнопок меню ты найдешь полную инструкцию.",
         reply_markup=get_main_kb(cur_uric)
     )
 
@@ -82,7 +84,7 @@ async def cmd_func_menu(message: Message):
     """
     Обработчик нажатия кнопки "Продолжить с [название юрлица]". Отправляет пользователю меню действий с юр лицом.
     """
-    cur_uric = message.text.split(' ')[2:]
+    cur_uric = message.text.split(' ')[2:][0]
     await safe_send_message(
         bot, message,
         text=(

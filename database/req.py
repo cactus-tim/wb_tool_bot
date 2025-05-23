@@ -1,4 +1,6 @@
+import base64
 import datetime
+import hashlib
 from typing import Optional
 
 from sqlalchemy import select, desc, distinct, and_
@@ -6,6 +8,12 @@ from sqlalchemy import select, desc, distinct, and_
 from database.models import User, async_session, Uric, UserXUric, SubsribeStatus
 from errors.errors import *
 from handlers.errors import db_error_handler
+
+
+async def make_url_safe_hash(data: str, length: int = 12) -> str:
+    sha = hashlib.sha256(data.encode()).digest()
+    b64 = base64.urlsafe_b64encode(sha).decode()
+    return b64[:length]
 
 
 @db_error_handler
@@ -55,6 +63,16 @@ async def get_uric(name: str):
 
 
 @db_error_handler
+async def get_uric_by_hash(hash: str):
+    async with async_session() as session:
+        uric = await session.scalar(select(Uric).where(Uric.hash == hash))
+        if uric:
+            return uric
+        else:
+            return None
+
+
+@db_error_handler
 async def create_uric(name: str, owner_id: int, api_key: str) -> bool:
     async with async_session() as session:
         uric = await get_uric(name)
@@ -63,6 +81,7 @@ async def create_uric(name: str, owner_id: int, api_key: str) -> bool:
             data['name'] = name
             data['owner_id'] = owner_id
             data['api_key'] = api_key
+            data['hash'] = await make_url_safe_hash(name)
             uric_data = Uric(**data)
             session.add(uric_data)
             await session.commit()

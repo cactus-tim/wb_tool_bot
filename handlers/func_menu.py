@@ -1,6 +1,6 @@
 from aiogram.filters import StateFilter
 from aiogram import Router, F
-from aiogram.types import Message, CallbackQuery, BufferedInputFile
+from aiogram.types import Message, CallbackQuery, BufferedInputFile, ReplyKeyboardRemove
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 import requests
@@ -29,6 +29,8 @@ async def cmd_report(message: Message, state: FSMContext):
     """
     Функция для обработки команды "Получить отчет"
     """
+    msg = await safe_send_message(bot, message, 'Загрузка...', reply_markup=ReplyKeyboardRemove())
+    await msg.delete()
     await safe_send_message(bot, message, text="Укажите дату начала отчета в формате YYYY-MM-DD\n"
                                                "Помните, что период не может превышать неделю",
                             reply_markup=get_cancel_ikb('func'))
@@ -75,8 +77,7 @@ async def second_date(message: Message, state: FSMContext):
         return
     date_to = message.text
     date_from = (await state.get_data()).get('first_date')
-    msg = await safe_send_message(bot, message, text="Отчет формируется, пожалуйста подождите, это займет пару минут",
-                                  reply_markup=get_cancel_ikb('func'))
+    msg = await safe_send_message(bot, message, text="Отчет формируется, пожалуйста подождите, это займет пару минут")
     url = f'https://seller-analytics-api.wildberries.ru/api/v1/paid_storage?dateFrom={date_from}&dateTo={date_to}'
     headers = {
         'Authorization': f'Bearer {uric.api_key}'
@@ -127,6 +128,8 @@ async def cmd_spp_input(message: Message, state: FSMContext):
     """
     Функция для обработки команды "Получить СПП"
     """
+    msg = await safe_send_message(bot, message, 'Загрузка...', reply_markup=ReplyKeyboardRemove())
+    await msg.delete()
     await safe_send_message(bot, message,
                             text="Выберете формат предоставляемых данных",
                             reply_markup=get_input_format_ikb())
@@ -182,8 +185,8 @@ async def cmd_spp(callback: CallbackQuery, state: FSMContext):
             return
 
         to_del = (await safe_send_message(bot, user.id,
-                                          text=f'Ожидаемое время получения - {20 + int(len(ids) * 0.25)} секунд',
-                                          reply_markup=get_cancel_ikb('func'))).message_id
+                                          text=f'Ожидаемое время получения - {20 + int(len(ids) * 0.25)} секунд'
+                                          )).message_id
         spp = await get_spp(ids, user.id)
         if spp.get(0, 1) == 0:
             await safe_send_message(bot, user.id, "Неизвестная ошибка, попробуйте позже", reply_markup=get_func_kb())
@@ -247,8 +250,8 @@ async def spp_list(message: Message, state: FSMContext):
         ids = list(int(el) for el in df['nmId'].unique())
 
     to_del = (await safe_send_message(bot, message,
-                                      text=f'Ожидаемое время получения - {20 + int(len(ids) * 0.25)} секунд',
-                                      reply_markup=get_cancel_ikb('func'))).message_id
+                                      text=f'Ожидаемое время получения - {20 + int(len(ids) * 0.25)} секунд'
+                                      )).message_id
     spp = await get_spp(ids, message.from_user.id)
     if spp.get(0, 1) == 0:
         await safe_send_message(bot, message, "Неизвестная ошибка, попробуйте позже", reply_markup=get_func_kb())

@@ -1,5 +1,5 @@
 import asyncio
-from datetime import date, datetime
+from datetime import date, datetime as dt
 from aiogram.filters import Command
 from aiogram import Router
 from aiogram.types import Message
@@ -19,7 +19,7 @@ async def deactivate_sub(uric_name):
 
 
 def schedule_deactivation(uric_name: str, exp_date: date):
-    run_date = datetime.combine(exp_date, datetime.min.time())
+    run_date = dt.combine(exp_date, dt.min.time())
     job_id = f"deactivate_{uric_name}"
 
     if scheduler.get_job(job_id):
@@ -44,10 +44,15 @@ async def pay(message: Message):
         await safe_send_message(bot, message.from_user.id, 'У вас нет прав для выполнения этой команды.')
         return
     uric_name, subscribe, exp_date = message.text.split()[1:]
+    if subscribe == 'active':
+        subscribe = SubsribeStatus.ACTIVE
+    else:
+        await safe_send_message(bot, message.from_user.id, 'Некорректный статус подписки.')
+        return
     owner_id = (await get_uric(uric_name)).owner_id
     year, month, day = exp_date.split('.')
     exp_date_obj = date(int(year), int(month), int(day))
-    await pay_sub(uric_name, SubsribeStatus.ACTIVE, exp_date_obj)
+    await pay_sub(uric_name, subscribe, exp_date_obj)
     schedule_deactivation(uric_name, exp_date_obj)
     await safe_send_message(bot, message.from_user.id, 'Готово')
     await safe_send_message(bot, owner_id, f'Подписка для {uric_name} активирована до {exp_date}!')

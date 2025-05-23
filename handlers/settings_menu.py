@@ -1,5 +1,5 @@
 from aiogram import Router, F
-from aiogram.types import Message
+from aiogram.types import Message, ReplyKeyboardRemove
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 import requests
@@ -16,11 +16,13 @@ class ChangeApiKey(StatesGroup):
     change_api_key = State()
 
 
-@router.message(F.text == 'Сменить API ключ')
+@router.message(F.text == 'Обновить API ключ')
 async def change_api_key_start(message: Message, state: FSMContext):
     """
     Функция для смены API ключа.
     """
+    msg = await safe_send_message(bot, message, 'Загрузка...', reply_markup=ReplyKeyboardRemove())
+    await msg.delete()
     link = "https://blog-promopult-ru.turbopages.org/turbo/blog.promopult.ru/s/marketplejsy/api-klyuch-wildberries.html"
     await message.answer(f"Введите новый API ключ:\n<a href=\"{link}\">Как получить ключ?</a>\n",
                          reply_markup=get_cancel_ikb('settings'))
@@ -32,7 +34,7 @@ async def change_api_key(message: Message, state: FSMContext):
     """
     Функция для смены API ключа.
     """
-    new_api_key = message.text
+    new_api_key = message.text.strip().replace('\n', '').replace('\r', '')
     tg_id = message.from_user.id
 
     user = await get_user(tg_id)
@@ -46,7 +48,12 @@ async def change_api_key(message: Message, state: FSMContext):
     headers = {
         'Authorization': f'Bearer {new_api_key}'
     }
-    response = requests.get(url, headers=headers)
+    try:
+        response = requests.get(url, headers=headers)
+    except Exception:
+        await safe_send_message(bot, message, 'Некорректный API ключ.\nПопробуйте еше раз',
+                                reply_markup=get_cancel_ikb('settings'))
+        return
     if response.status_code == 200:
         await update_uric(user.cur_uric, new_api_key)
         await message.answer("API ключ успешно изменен", reply_markup=get_settings_kb(uric.owner_id == tg_id))
@@ -66,7 +73,7 @@ async def status_payment(message: Message):
     user = await get_user(message.from_user.id)
     uric = await get_uric(user.cur_uric)
     text = (f"Статус подписки по юр. лицу {uric.name}:\n"
-            f"Подпсика - {uric.subscription}\n"
+            f"Подпсика - {uric.subsribe.value}\n"
             f"Дата окончания подписки - {uric.exp_date}\n")
     await safe_send_message(bot, message, text=text, reply_markup=get_settings_kb(uric.owner_id == user.id))
 
@@ -87,6 +94,7 @@ async def add_employee(message: Message):
     Функция для добавления сотрудника.
     """
     cur_uric = (await get_user(message.from_user.id)).cur_uric
-    url = f'https://t.me/?start={cur_uric}'  # TODO: add bot name
+    hash = (await get_uric(cur_uric)).hash
+    url = f'https://t.me/@brewbegtbot?start={hash}'
     await safe_send_message(bot, message, f"Отправьте эту сслыку сотруднику {url}",
                             reply_markup=get_settings_kb((await get_uric(cur_uric)).owner_id == message.from_user.id))
