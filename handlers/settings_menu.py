@@ -6,7 +6,7 @@ import requests
 
 from handlers.errors import safe_send_message
 from keyboards.keyboards import get_cancel_ikb, get_settings_kb
-from instance import bot
+from instance import bot, bot_link
 from database.req import *
 
 router = Router()
@@ -95,6 +95,6 @@ async def add_employee(message: Message):
     """
     cur_uric = (await get_user(message.from_user.id)).cur_uric
     hash = (await get_uric(cur_uric)).hash
-    url = f'https://t.me/@brewbegtbot?start={hash}'
+    url = f'https://t.me/@{bot_link}?start={hash}'
     await safe_send_message(bot, message, f"Отправьте эту сслыку сотруднику {url}",
                             reply_markup=get_settings_kb((await get_uric(cur_uric)).owner_id == message.from_user.id))

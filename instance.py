@@ -28,6 +28,8 @@ bot = Bot(
     )
 )
 
+bot_link = os.getenv('BOT_LINK')
+
 logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
