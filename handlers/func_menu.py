@@ -94,7 +94,7 @@ async def second_date(message: Message, state: FSMContext):
         await state.clear()
         return
     task_id = response.json()['data']['taskId']
-    data = await fetch_data(task_id, headers, bot, message, msg, user)
+    data = await fetch_data(task_id, headers, bot, msg, user)
     if data is not None:
         df = pd.DataFrame(data)
     else:
