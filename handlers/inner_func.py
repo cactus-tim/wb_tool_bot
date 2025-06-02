@@ -178,12 +178,17 @@ async def get_spp(ids: list, user_id: int) -> dict:
                 continue
             if response.status_code == 200:
                 try:
-                    after = int(response.json()['data']['products'][0]['sizes'][0]['price']['total'] / 100)
+                    after = 0
+                    for ell in response.json()['data']['products'][0]['sizes']:
+                        if ell['price']:
+                            after = int(ell['price']['product'] / 100)
+                            break
                     # TODO: her problem too (set of sizes)
                 except Exception as e:
                     res[el] = 'Товара нет в наличии'
                     continue
-                res[el] = 100 - int((after / before) * 100) if (100 - int((after / before) * 100)) > 0 and after != 0 else 0
+                res[el] = int(100 - (after / before) * 100) if (100 - int((after / before) * 100)) > 0 and after != 0 \
+                    else 0
             else:
                 res[el] = 'Не удалось получить СПП'
         else:
@@ -232,11 +237,15 @@ async def get_spp(ids: list, user_id: int) -> dict:
                     res[el] = 'Не удалось получить СПП'
                     continue
                 try:
-                    after = int(response1.json()['data']['products'][0]['sizes'][0]['price']['total'] / 100)
+                    after = 0
+                    for ell in response1.json()['data']['products'][0]['sizes']:
+                        if ell['price']:
+                            after = int(ell['price']['product'] / 100)
+                            break
                 except Exception as e:
                     res[el] = 'Товара нет в наличии'
                     continue
-                res[el] = 100 - int((after / before) * 100) if (100 - int((after / before) * 100)) > 0 and after != 0 \
+                res[el] = int(100 - (after / before) * 100) if (100 - int((after / before) * 100)) > 0 and after != 0 \
                     else 0
             else:
                 res[el] = 'Не удалось получить СПП'
