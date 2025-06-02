@@ -47,7 +47,6 @@ async def first_date(message: Message, state: FSMContext):
     except ValueError:
         await safe_send_message(bot, message, text="Неверный формат даты, необходимо указать дату в формате YYYY-MM-DD",
                                 reply_markup=get_cancel_ikb('func'))
-        await state.clear()
         return
     await state.update_data(first_date=message.text)
     await safe_send_message(bot, message, text="Укажите дату конца отчета в формате YYYY-MM-DD\n"
@@ -66,7 +65,6 @@ async def second_date(message: Message, state: FSMContext):
     except ValueError:
         await safe_send_message(bot, message, text="Неверный формат даты, необходимо указать дату в формате YYYY-MM-DD",
                                 reply_markup=get_cancel_ikb('func'))
-        await state.clear()
         return
 
     user = await get_user(message.from_user.id)
