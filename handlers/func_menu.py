@@ -29,6 +29,11 @@ async def cmd_report(message: Message, state: FSMContext):
     """
     Функция для обработки команды "Получить отчет"
     """
+    uric_name = (await get_user(message.from_user.id)).cur_uric
+    subsribe = (await get_uric(uric_name)).subsribe
+    if subsribe == SubsribeStatus.INACTIVE:
+        await safe_send_message(bot, message, 'У вас не оплачена подписка для этой услуги(', get_func_kb())
+        return
     msg = await safe_send_message(bot, message, 'Загрузка...', reply_markup=ReplyKeyboardRemove())
     await msg.delete()
     await safe_send_message(bot, message, text="Укажите дату начала отчета в формате YYYY-MM-DD\n"
@@ -126,6 +131,11 @@ async def cmd_spp_input(message: Message, state: FSMContext):
     """
     Функция для обработки команды "Получить СПП"
     """
+    uric_name = (await get_user(message.from_user.id)).cur_uric
+    subsribe = (await get_uric(uric_name)).subsribe
+    if subsribe == SubsribeStatus.INACTIVE:
+        await safe_send_message(bot, message, 'У вас не оплачена подписка для этой услуги(', get_func_kb())
+        return
     msg = await safe_send_message(bot, message, 'Загрузка...', reply_markup=ReplyKeyboardRemove())
     await msg.delete()
     await safe_send_message(bot, message,

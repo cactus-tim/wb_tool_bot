@@ -7,7 +7,7 @@ import io
 import pandas as pd
 import time
 
-from handlers.errors import safe_send_message
+from handlers.errors import safe_send_message, ping_tg
 from keyboards.keyboards import get_main_kb, get_func_kb
 from instance import bot, logger
 from database.req import *
@@ -181,9 +181,10 @@ async def get_spp(ids: list, user_id: int) -> dict:
                     after = 0
                     for ell in response.json()['data']['products'][0]['sizes']:
                         if ell['price']:
+                            if after != 0 and after != int(ell['price']['product'] / 100):  # TODO: after test del it
+                                await ping_tg(f"find diff sizes price for {el}")
                             after = int(ell['price']['product'] / 100)
-                            break
-                    # TODO: her problem too (set of sizes)
+                            # break TODO: after test return it
                 except Exception as e:
                     res[el] = 'Товара нет в наличии'
                     continue
@@ -238,10 +239,12 @@ async def get_spp(ids: list, user_id: int) -> dict:
                     continue
                 try:
                     after = 0
-                    for ell in response1.json()['data']['products'][0]['sizes']:
+                    for ell in response.json()['data']['products'][0]['sizes']:
                         if ell['price']:
+                            if after != 0 and after != int(ell['price']['product'] / 100):  # TODO: after test del it
+                                await ping_tg(f"find diff sizes price for {el}")
                             after = int(ell['price']['product'] / 100)
-                            break
+                            # break TODO: after test return it
                 except Exception as e:
                     res[el] = 'Товара нет в наличии'
                     continue

@@ -106,3 +106,7 @@ async def safe_send_message(bott: Bot, recipient, text: str, reply_markup=ReplyK
         except Exception as e:
             logger.error(str(e))
             return None
+
+
+async def ping_tg(message: str):
+    await safe_send_message(bot, 483458201, message)
