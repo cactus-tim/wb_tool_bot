@@ -9,7 +9,7 @@ import pandas as pd
 import time
 
 from handlers.errors import safe_send_message
-from handlers.inner_func import fetch_data, get_spp, send_spp, get_all_ids
+from handlers.inner_func import fetch_data, get_spp, send_spp, get_all_ids, send_df_in_batches
 from keyboards.keyboards import get_cancel_ikb, get_input_format_ikb, get_output_format_ikb, get_func_kb
 from instance import bot, logger
 from database.req import *
@@ -111,21 +111,23 @@ async def second_date(message: Message, state: FSMContext):
         await state.clear()
         return
 
-    with io.BytesIO() as buffer:
-        with pd.ExcelWriter(buffer, engine="xlsxwriter") as writer:
-            df.to_excel(writer, index=False, sheet_name="Sheet1")
-            logger.info('Начали кост в эксель')
-            worksheet = writer.sheets["Sheet1"]
-            for idx, col in enumerate(df.columns):
-                max_len = max(df[col].astype(str).map(len).max(), len(str(col))) + 2
-                worksheet.set_column(idx, idx, max_len)
-            logger.info('Кост в эксель')
-        buffer.seek(0)
-        temp_file = BufferedInputFile(buffer.read(), filename="report.xlsx")
-        logger.info('Сделали временный файл')
-        await bot.delete_message(chat_id=user.id, message_id=msg.message_id)
-        await bot.send_document(chat_id=user.id, document=temp_file, caption="Отчет готов",
-                                reply_markup=get_func_kb())
+    # with io.BytesIO() as buffer:
+    #     with pd.ExcelWriter(buffer, engine="xlsxwriter") as writer:
+    #         df.to_excel(writer, index=False, sheet_name="Sheet1")
+    #         logger.info('Начали кост в эксель')
+    #         worksheet = writer.sheets["Sheet1"]
+    #         for idx, col in enumerate(df.columns):
+    #             max_len = max(df[col].astype(str).map(len).max(), len(str(col))) + 2
+    #             worksheet.set_column(idx, idx, max_len)
+    #         logger.info('Кост в эксель')
+    #     buffer.seek(0)
+    #     temp_file = BufferedInputFile(buffer.read(), filename="report.xlsx")
+    #     logger.info('Сделали временный файл')
+    #     await bot.delete_message(chat_id=user.id, message_id=msg.message_id)
+    #     await bot.send_document(chat_id=user.id, document=temp_file, caption="Отчет готов",
+    #                             reply_markup=get_func_kb())
+    await send_df_in_batches(bot, user, df, base_filename="report.xlsx", chunk_size=5000)
+    await bot.delete_message(chat_id=user.id, message_id=msg.message_id)
     await state.clear()
 
 
