@@ -180,7 +180,7 @@ async def get_spp(ids: list, user_id: int) -> dict:
                 try:
                     after = 0
                     for ell in response.json()['data']['products'][0]['sizes']:
-                        if ell['price']:
+                        if ell.get('price', 0):
                             if after != 0 and after != int(ell['price']['product'] / 100):  # TODO: after test del it
                                 await ping_tg(f"find diff sizes price for {el}")
                             after = int(ell['price']['product'] / 100)
@@ -240,7 +240,7 @@ async def get_spp(ids: list, user_id: int) -> dict:
                 try:
                     after = 0
                     for ell in response.json()['data']['products'][0]['sizes']:
-                        if ell['price']:
+                        if ell.get('price', 0):
                             if after != 0 and after != int(ell['price']['product'] / 100):  # TODO: after test del it
                                 await ping_tg(f"find diff sizes price for {el}")
                             after = int(ell['price']['product'] / 100)
