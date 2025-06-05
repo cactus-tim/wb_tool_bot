@@ -11,7 +11,7 @@ import time
 from handlers.errors import safe_send_message
 from handlers.inner_func import fetch_data, get_spp, send_spp, get_all_ids
 from keyboards.keyboards import get_cancel_ikb, get_input_format_ikb, get_output_format_ikb, get_func_kb
-from instance import bot
+from instance import bot, logger
 from database.req import *
 
 
@@ -81,11 +81,13 @@ async def second_date(message: Message, state: FSMContext):
     date_to = message.text
     date_from = (await state.get_data()).get('first_date')
     msg = await safe_send_message(bot, message, text="Отчет формируется, пожалуйста подождите, это займет пару минут")
+    logger.info('До этой точки всегда доходим')
     url = f'https://seller-analytics-api.wildberries.ru/api/v1/paid_storage?dateFrom={date_from}&dateTo={date_to}'
     headers = {
         'Authorization': f'Bearer {uric.api_key}'
     }
     response = requests.get(url, headers=headers)
+    logger.info('Отправили запрос на создание жобы')
     if response.status_code != 200:
         if response.status_code == 401:
             await safe_send_message(bot, message, text="Недействительный ключ", reply_markup=get_func_kb())
@@ -97,10 +99,14 @@ async def second_date(message: Message, state: FSMContext):
         await state.clear()
         return
     task_id = response.json()['data']['taskId']
+    logger.info('Обработали айди жобы')
     data = await fetch_data(task_id, headers, bot, msg, user)
+    logger.info('Извлекли данные')
     if data is not None:
         df = pd.DataFrame(data)
+        logger.info('Данные залили в дф')
     else:
+        logger.info('Данные пустые приехали')
         await safe_send_message(bot, message, 'Какая-то ошибка, попробуйте позже', reply_markup=get_func_kb())
         await state.clear()
         return
@@ -108,12 +114,15 @@ async def second_date(message: Message, state: FSMContext):
     with io.BytesIO() as buffer:
         with pd.ExcelWriter(buffer, engine="xlsxwriter") as writer:
             df.to_excel(writer, index=False, sheet_name="Sheet1")
+            logger.info('Начали кост в эксель')
             worksheet = writer.sheets["Sheet1"]
             for idx, col in enumerate(df.columns):
                 max_len = max(df[col].astype(str).map(len).max(), len(str(col))) + 2
                 worksheet.set_column(idx, idx, max_len)
+            logger.info('Кост в эксель')
         buffer.seek(0)
         temp_file = BufferedInputFile(buffer.read(), filename="report.xlsx")
+        logger.info('Сделали временный файл')
         await bot.delete_message(chat_id=user.id, message_id=msg.message_id)
         await bot.send_document(chat_id=user.id, document=temp_file, caption="Отчет готов",
                                 reply_markup=get_func_kb())
