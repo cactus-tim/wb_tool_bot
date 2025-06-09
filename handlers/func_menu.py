@@ -9,7 +9,7 @@ import pandas as pd
 import time
 
 from handlers.errors import safe_send_message
-from handlers.inner_func import fetch_data, get_spp, send_spp, get_all_ids, send_df_in_batches
+from handlers.inner_func import fetch_data, get_spp, send_spp, get_all_ids, send_df
 from keyboards.keyboards import get_cancel_ikb, get_input_format_ikb, get_output_format_ikb, get_func_kb
 from instance import bot, logger
 from database.req import *
@@ -126,7 +126,7 @@ async def second_date(message: Message, state: FSMContext):
     #     await bot.delete_message(chat_id=user.id, message_id=msg.message_id)
     #     await bot.send_document(chat_id=user.id, document=temp_file, caption="Отчет готов",
     #                             reply_markup=get_func_kb())
-    await send_df_in_batches(bot, user, df, base_filename="report.xlsx", chunk_size=5000)
+    await send_df(bot, user, df, base_filename="report.xlsx", chunk_size=5000)
     await bot.delete_message(chat_id=user.id, message_id=msg.message_id)
     await state.clear()
 

@@ -13,60 +13,57 @@ from instance import bot, logger
 from database.req import *
 
 
-async def send_df_in_batches(bot, user, df: pd.DataFrame, base_filename: str = "report.xlsx", chunk_size: int = 5000):
+async def send_df(bot, user, df: pd.DataFrame, base_filename: str = "report.xlsx", chunk_size: int = 10000):
     """
-    Разбивает DataFrame на чанки по chunk_size строк и отправляет каждый чанк отдельным Excel-файлом.
-
-    :param bot: экземпляр бота
-    :param user: объект пользователя (или просто его ID) для отправки файлов
-    :param df: DataFrame, который нужно разбить и отправить
-    :param base_filename: базовое имя для файлов. Каждая часть получит суффикс `_part{n}.xlsx`
-    :param chunk_size: максимальное число строк в одном файле (по умолчанию 5000)
+    Асинхронно отправляет DataFrame. Если строк меньше или равно chunk_size — Excel-файл,
+    иначе — CSV-файл. Запись в файловый буфер выполняется в фоновом потоке,
+    чтобы не блокировать event loop.
     """
     total_rows = len(df)
     if total_rows == 0:
-        # Нечего отправлять
-        return
+        return  # Нечего отправлять
 
-    # Считаем, сколько всего чанков
-    num_chunks = (total_rows + chunk_size - 1) // chunk_size
+    chat_id = user.id if hasattr(user, "id") else user
 
-    for chunk_index in range(num_chunks):
-        start = chunk_index * chunk_size
-        end = min(start + chunk_size, total_rows)
-        chunk_df = df.iloc[start:end]
+    def _build_excel_bytes(dataframe: pd.DataFrame) -> tuple[bytes, str]:
+        buf = io.BytesIO()
+        with pd.ExcelWriter(buf, engine="xlsxwriter") as writer:
+            dataframe.to_excel(writer, index=False, sheet_name="Sheet1")
+            worksheet = writer.sheets["Sheet1"]
+            for idx, col in enumerate(dataframe.columns):
+                max_len = max(dataframe[col].astype(str).map(len).max(), len(str(col))) + 2
+                worksheet.set_column(idx, idx, max_len)
+        buf.seek(0)
+        fname = base_filename
+        if not fname.lower().endswith('.xlsx'):
+            fname += '.xlsx'
+        return buf.read(), fname
 
-        # Подготовка памяти для XLSX
-        with io.BytesIO() as buffer:
-            with pd.ExcelWriter(buffer, engine="xlsxwriter") as writer:
-                # Записываем только текущий чанк
-                chunk_df.to_excel(writer, index=False, sheet_name="Sheet1")
-                worksheet = writer.sheets["Sheet1"]
+    def _build_csv_bytes(dataframe: pd.DataFrame) -> tuple[bytes, str]:
+        csv_data = dataframe.to_csv(index=False).encode('utf-8')
+        fname_root = base_filename.rsplit('.', 1)[0] if '.' in base_filename else base_filename
+        return csv_data, f"{fname_root}.csv"
 
-                # Настраиваем ширины колонок под содержимое
-                for col_idx, col_name in enumerate(chunk_df.columns):
-                    max_len = max(
-                        chunk_df[col_name].astype(str).map(len).max(),
-                        len(str(col_name))
-                    ) + 2
-                    worksheet.set_column(col_idx, col_idx, max_len)
-
-            buffer.seek(0)
-            # Генерируем имя файла с суффиксом части
-            if base_filename.lower().endswith(".xlsx"):
-                filename = base_filename[:-5] + f"_part{chunk_index+1}.xlsx"
-            else:
-                filename = base_filename + f"_part{chunk_index+1}.xlsx"
-
-            temp_file = BufferedInputFile(buffer.read(), filename=filename)
-
-            # Отправляем документ в Telegram
-            await bot.send_document(
-                chat_id=user.id if hasattr(user, "id") else user,
-                document=temp_file,
-                caption=f"Отчет часть {chunk_index+1}/{num_chunks}",
-                reply_markup=get_func_kb()
-            )
+    if total_rows <= chunk_size:
+        # Генерируем Excel в отдельном потоке
+        content, filename = await asyncio.to_thread(_build_excel_bytes, df)
+        temp_file = BufferedInputFile(content, filename=filename)
+        await bot.send_document(
+            chat_id=chat_id,
+            document=temp_file,
+            caption="Отчет",
+            reply_markup=get_func_kb()
+        )
+    else:
+        # Генерируем CSV в отдельном потоке
+        content, filename = await asyncio.to_thread(_build_csv_bytes, df)
+        temp_file = BufferedInputFile(content, filename=filename)
+        await bot.send_document(
+            chat_id=chat_id,
+            document=temp_file,
+            caption="Отчет (CSV)",
+            reply_markup=get_func_kb()
+        )
 
 
 async def fetch_data(task_id, headers, bot, msg, user, max_retries=3):
