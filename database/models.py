@@ -37,6 +37,7 @@ class Uric(Base):
     subsribe = Column(Enum(SubsribeStatus, name='subsribe_status'), default=SubsribeStatus.INACTIVE)
     exp_date = Column(Date, nullable=True, default=None)
     hash = Column(String, nullable=False)
+    trade_mark = Column(String, default=None)
 
 
 class UserXUric(Base):

@@ -41,7 +41,7 @@ async def create_user(tg_id: int):
 
 
 @db_error_handler
-async def update_user(tg_id: int, uric: str):
+async def update_user_cur_uric(tg_id: int, uric: str):
     async with async_session() as session:
         user = await get_user(tg_id)
         if user:
@@ -73,7 +73,7 @@ async def get_uric_by_hash(hash: str):
 
 
 @db_error_handler
-async def create_uric(name: str, owner_id: int, api_key: str) -> bool:
+async def create_uric(name: str, owner_id: int, api_key: str, trade_mark: str) -> bool:
     async with async_session() as session:
         uric = await get_uric(name)
         data = {}
@@ -82,6 +82,7 @@ async def create_uric(name: str, owner_id: int, api_key: str) -> bool:
             data['owner_id'] = owner_id
             data['api_key'] = api_key
             data['hash'] = await make_url_safe_hash(name)
+            data['trade_mark'] = trade_mark
             uric_data = Uric(**data)
             session.add(uric_data)
             await session.commit()
@@ -91,7 +92,20 @@ async def create_uric(name: str, owner_id: int, api_key: str) -> bool:
 
 
 @db_error_handler
-async def update_uric(name: str, api_key: str):
+async def update_uric(name: str, data: dict):
+    async with async_session() as session:
+        uric = await get_uric(name)
+        if uric:
+            for key, value in data.items():
+                setattr(uric, key, value)
+            session.add(uric)
+            await session.commit()
+        else:
+            raise Error404
+
+
+@db_error_handler
+async def update_uric_api_key(name: str, api_key: str):
     async with async_session() as session:
         uric = await get_uric(name)
         if uric:

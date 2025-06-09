@@ -76,7 +76,7 @@ async def cmd_key(message: Message, state: FSMContext):
     }
     response = requests.get(url, headers=headers)
     if response.status_code == 200:
-        await update_user(message.from_user.id, {'api_key': key})
+        await update_user_cur_uric(message.from_user.id, {'api_key': key})
         await safe_send_message(bot, message, text="Ключ добавлен!")
     elif response.status_code == 401:
         await safe_send_message(bot, message, text="Недействительный ключ")
@@ -92,7 +92,7 @@ async def add_key(message: Message, state: FSMContext):
     }
     response = requests.get(url, headers=headers)
     if response.status_code == 200:
-        await update_user(message.from_user.id, {'api_key': message.text})
+        await update_user_cur_uric(message.from_user.id, {'api_key': message.text})
         await safe_send_message(bot, message, text="Ключ добавлен!")
     elif response.status_code == 401:
         await safe_send_message(bot, message, text="Недействительный ключ")

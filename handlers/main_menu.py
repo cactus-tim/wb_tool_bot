@@ -57,7 +57,7 @@ async def get_uric_api_key(message: Message, state: FSMContext):
     uric_name = data.get('uric_name')
     api_key = message.text.strip().replace('\n', '').replace('\r', '')
 
-    url = 'https://common-api.wildberries.ru/ping'
+    url = 'https://common-api.wildberries.ru/api/v1/seller-info'
     headers = {
         'Authorization': f'Bearer {api_key}'
     }
@@ -68,8 +68,8 @@ async def get_uric_api_key(message: Message, state: FSMContext):
                                 reply_markup=get_cancel_ikb('main'))
         return
     if response.status_code == 200:
-        await create_uric(uric_name, message.from_user.id, api_key)
-        await update_user(message.from_user.id, uric_name)
+        await create_uric(uric_name, message.from_user.id, api_key, response.json()['tradeMark'])
+        await update_user_cur_uric(message.from_user.id, uric_name)
         await add_user_uric(message.from_user.id, uric_name)
         await safe_send_message(bot, message, "Юр лицо успешно создано", reply_markup=get_main_kb(uric_name))
         await state.clear()
@@ -100,7 +100,7 @@ async def choose_uric(callback: CallbackQuery):
     Обработчик выбора юр лица.
     """
     uric_name = callback.data.split(':')[1]
-    await update_user(callback.from_user.id, uric_name)
+    await update_user_cur_uric(callback.from_user.id, uric_name)
     await safe_send_message(bot, callback.message, "Юр лицо выбрано", reply_markup=get_main_kb(uric_name))
     await callback.answer()
 

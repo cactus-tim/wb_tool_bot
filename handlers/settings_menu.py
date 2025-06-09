@@ -44,7 +44,7 @@ async def change_api_key(message: Message, state: FSMContext):
         await message.answer("Этот API ключ уже установлен", reply_markup=get_settings_kb(uric.owner_id == tg_id))
         return
 
-    url = 'https://common-api.wildberries.ru/ping'
+    url = 'https://common-api.wildberries.ru/api/v1/seller-info'
     headers = {
         'Authorization': f'Bearer {new_api_key}'
     }
@@ -55,7 +55,14 @@ async def change_api_key(message: Message, state: FSMContext):
                                 reply_markup=get_cancel_ikb('settings'))
         return
     if response.status_code == 200:
-        await update_uric(user.cur_uric, new_api_key)
+        trade_mark = (await get_uric(user.cur_uric)).trade_mark
+        if trade_mark != 'admin' and trade_mark != response.json()['tradeMark']:
+            await safe_send_message(bot, message, "Вы пытаетесь использовать API ключ другого юр лица.\n"
+                                                  "Используйте только от своего!")
+            await state.clear()
+            return
+        await update_uric_api_key(user.cur_uric, new_api_key)
+
         await message.answer("API ключ успешно изменен", reply_markup=get_settings_kb(uric.owner_id == tg_id))
         await state.clear()
     elif response.status_code == 401:

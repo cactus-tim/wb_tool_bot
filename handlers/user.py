@@ -39,7 +39,7 @@ async def cmd_start(message: Message, command: CommandObject):
         if not uric:
             await safe_send_message(bot, message, text='Привет, ссылка недействительна, обратитесь к отправителю')
             return
-        await update_user(message.from_user.id, uric.name)
+        await update_user_cur_uric(message.from_user.id, uric.name)
         user_uric = await get_user_uric(message.from_user.id, uric.name)
         if user_uric:
             await safe_send_message(bot, message, text='Привет, вы уже добавлены в компанию')
