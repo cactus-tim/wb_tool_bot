@@ -58,7 +58,8 @@ async def change_api_key(message: Message, state: FSMContext):
         trade_mark = (await get_uric(user.cur_uric)).trade_mark
         if trade_mark != 'admin' and trade_mark != response.json()['tradeMark']:
             await safe_send_message(bot, message, "Вы пытаетесь использовать API ключ другого юр лица.\n"
-                                                  "Используйте только от своего!")
+                                                  "Используйте только от своего!",
+                                    get_settings_kb(uric.owner_id == tg_id))
             await state.clear()
             return
         await update_uric_api_key(user.cur_uric, new_api_key)
