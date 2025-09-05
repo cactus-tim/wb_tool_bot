@@ -34,7 +34,7 @@ class Uric(Base):
     name = Column(String, primary_key=True, index=True)
     owner_id = Column(BigInteger, ForeignKey("user.id"), nullable=False)
     api_key = Column(String, default=None)
-    subsribe = Column(Enum(SubsribeStatus, name='subsribe_status'), default=SubsribeStatus.INACTIVE)
+    subsribe = Column(Enum(SubsribeStatus, name='subsribe_status'), default=SubsribeStatus.ACTIVE)
     exp_date = Column(Date, nullable=True, default=None)
     hash = Column(String, nullable=False)
     trade_mark = Column(String, default=None)
