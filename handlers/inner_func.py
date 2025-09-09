@@ -156,6 +156,7 @@ async def get_all_ids(user_id: int, return_dict: bool = False):
     while True:
         url = f"https://discounts-prices-api.wildberries.ru/api/v2/list/goods/filter?limit=1000&offset={offset}"
         try:
+            await asyncio.sleep(1)
             response = requests.get(url, headers=headers)
         except requests.exceptions.RequestException as e:
             logger.exception(f"Ошибка при запросе к {url}:\n{e}")
@@ -258,6 +259,7 @@ async def get_spp(ids: list, user_id: int) -> dict:
         for el in chunk:
             url = f"https://discounts-prices-api.wildberries.ru/api/v2/list/goods/filter?limit=1&filterNmID={el}"
             try:
+                await asyncio.sleep(0.3)
                 response = requests.get(url, headers=headers)
             except requests.exceptions.RequestException as e:
                 logger.exception(f"Ошибка при запросе к {url}:\n{e}")
