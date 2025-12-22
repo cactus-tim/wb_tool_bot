@@ -218,8 +218,7 @@ async def get_spp(ids: list, user_id: int) -> dict:
     # дальше для каждого найденного товара сразу достаем реальнуб цену на вб, а все, чьи цены не нашли, кидаем в список для повторного прохода
     for el in ids:
         if el in all.keys():
-            url = (f'https://card.wb.ru/cards/v2/detail?appType=1&curr=rub&dest='
-                   f'-3339985&hide_dtype=13&spp=30&ab_testing=false&lang=ru&nm={el}')
+            url = (f'https://card.wb.ru/cards/v4/detail?nm={el}&dest=-337422&locale=ru')
             try:
                 response = requests.get(url)
             except requests.exceptions.RequestException as e:
@@ -274,8 +273,7 @@ async def get_spp(ids: list, user_id: int) -> dict:
                     logger.exception(f"Неожиданный статус код: {response.status_code} для {el}")
                 res[el] = 'Не удалось получить СПП'
                 continue
-            url1 = (f'https://card.wb.ru/cards/v2/detail?appType=1&curr=rub&dest=-'
-                    f'3339985&hide_dtype=13&spp=30&ab_testing=false&lang=ru&nm={el}')
+            url1 = (f'https://card.wb.ru/cards/v4/detail?nm={el}&dest=-337422&locale=ru')
             try:
                 response1 = requests.get(url1, headers={})
             except requests.exceptions.RequestException as e:
