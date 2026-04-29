@@ -161,7 +161,7 @@ async def get_all_ids(user_id: int, return_dict: bool = False):
         except requests.exceptions.RequestException as e:
             logger.exception(f"Ошибка при запросе к {url}:\n{e}")
             await safe_send_message(bot, user_id, 'Ошибка при получении СПП', reply_markup=get_func_kb())
-            return res
+            return all if return_dict else res
         if response.status_code != 200:
             if response.status_code == 401:
                 logger.exception("Пользователь не авторизован (401).")
@@ -174,7 +174,7 @@ async def get_all_ids(user_id: int, return_dict: bool = False):
             else:
                 logger.exception(f"Неожиданный статус код: {response.status_code}")
                 await safe_send_message(bot, user_id, 'Ошибка при получении СПП', reply_markup=get_func_kb())
-            return res
+            return all if return_dict else res
         df = pd.DataFrame(response.json()['data']['listGoods'])
 
         part_res = [int(row['nmID']) for _, row in df.iterrows()]
