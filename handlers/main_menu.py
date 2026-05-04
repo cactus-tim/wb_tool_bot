@@ -99,10 +99,10 @@ async def choose_uric(callback: CallbackQuery):
     """
     Обработчик выбора юр лица.
     """
+    await callback.answer()
     uric_name = callback.data.split(':')[1]
     await update_user_cur_uric(callback.from_user.id, uric_name)
-    await safe_send_message(bot, callback.message, "Юр лицо выбрано", reply_markup=get_main_kb(uric_name))
-    await callback.answer()
+    await safe_send_message(bot, callback, f"Юр лицо <b>{uric_name}</b> выбрано", reply_markup=get_main_kb(uric_name))
 
 
 @router.message(F.text == 'Полная инструкция')

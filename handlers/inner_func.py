@@ -220,45 +220,58 @@ async def get_spp(ids: list, user_id: int) -> dict:
     headers = {
         'Authorization': f'Bearer {key}'
     }
-    start_time = time.perf_counter()
-    good, retry = [], []
-    # для начала получаем все товары с ценами, которые есть у юр лица
+    wb_card_headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
+                      '(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'Accept': 'application/json',
+    }
+    # Получаем все товары юр лица с ценами из официального API
     all = await get_all_ids(user_id, return_dict=True)
-    # дальше для каждого найденного товара сразу достаем реальнуб цену на вб, а все, чьи цены не нашли, кидаем в список для повторного прохода
-    for el in ids:
-        if el in all.keys():
-            url = (f'https://card.wb.ru/cards/v4/detail?nm={el}&dest=-337422&locale=ru')
-            try:
-                response = requests.get(url)
-            except requests.exceptions.RequestException as e:
-                logger.exception(f"Ошибка при запросе к {url}:\n{e}")
+    # Делим ids на найденные в юр лице и те, которых нет
+    ids_in_uric = [el for el in ids if el in all]
+    retry = [el for el in ids if el not in all]
+
+    # Батчами по 20 артикулов за запрос к card.wb.ru
+    CARD_BATCH = 20
+    for i in range(0, len(ids_in_uric), CARD_BATCH):
+        batch = ids_in_uric[i:i + CARD_BATCH]
+        nm_param = ';'.join(str(x) for x in batch)
+        url = f'https://card.wb.ru/cards/v4/detail?nm={nm_param}&dest=-337422&locale=ru'
+        await asyncio.sleep(1)
+        try:
+            response = requests.get(url, headers=wb_card_headers, timeout=10)
+        except requests.exceptions.RequestException as e:
+            logger.exception(f"Ошибка при запросе к card.wb.ru batch:\n{e}")
+            for el in batch:
                 res[el] = 'Не удалось получить СПП'
-                continue
-            before = all[el]
+            continue
+        if response.status_code != 200:
+            for el in batch:
+                res[el] = 'Не удалось получить СПП'
+            continue
+        # Разбираем ответ: products — список товаров в том же порядке
+        products_map = {}
+        try:
+            for product in response.json().get('products', []):
+                nm_id = int(product['id'])
+                after = 0
+                for ell in product.get('sizes', []):
+                    if ell.get('price', 0):
+                        after = int(ell['price']['product'] / 100)
+                products_map[nm_id] = after
+        except Exception as e:
+            logger.exception(f"Ошибка при разборе ответа card.wb.ru: {e}")
+        for el in batch:
+            before = all.get(el, 0)
             if before == 0:
                 res[el] = 'Не удалось получить СПП'
                 continue
-            if response.status_code == 200:
-                try:
-                    after = 0
-                    for ell in response.json()['products'][0]['sizes']:
-                        if ell.get('price', 0):
-                            if after != 0 and after != int(ell['price']['product'] / 100):  # TODO: after test del it
-                                await ping_tg(f"find diff sizes price for {el}")
-                            after = int(ell['price']['product'] / 100)
-                            # break TODO: after test return it
-                except Exception as e:
-                    res[el] = 'Товара нет в наличии'
-                    continue
-                res[el] = int(100 - (after / before) * 100) if (100 - int((after / before) * 100)) > 0 and after != 0 \
-                    else 0
-            else:
-                res[el] = 'Не удалось получить СПП'
-        else:
-            retry.append(el)
-    cur_timer = time.perf_counter() - start_time
-    if cur_timer <= 10:
-        await asyncio.sleep(10 - cur_timer)
+            after = products_map.get(el, 0)
+            if after == 0:
+                res[el] = 'Товара нет в наличии'
+                continue
+            spp_val = int(100 - (after / before) * 100)
+            res[el] = spp_val if spp_val > 0 else 0
     # если остались товары, которые не нашли в базе, то делаем запросы к ним (вб апи + цена на сайте),
     # бьем на чанки что бы не было 429
     chunks = [retry[i:i + 6] for i in range(0, len(retry), 6)]
@@ -292,7 +305,7 @@ async def get_spp(ids: list, user_id: int) -> dict:
                 continue
             url1 = (f'https://card.wb.ru/cards/v4/detail?nm={el}&dest=-337422&locale=ru')
             try:
-                response1 = requests.get(url1, headers={})
+                response1 = requests.get(url1, headers=wb_card_headers, timeout=10)
             except requests.exceptions.RequestException as e:
                 logger.exception(f"Ошибка при запросе к {url1}:\n{e}")
                 res[el] = 'Не удалось получить СПП'

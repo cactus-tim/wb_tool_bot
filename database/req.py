@@ -43,10 +43,9 @@ async def create_user(tg_id: int):
 @db_error_handler
 async def update_user_cur_uric(tg_id: int, uric: str):
     async with async_session() as session:
-        user = await get_user(tg_id)
+        user = await session.scalar(select(User).where(User.id == tg_id))
         if user:
             user.cur_uric = uric
-            session.add(user)
             await session.commit()
         else:
             raise Error404
