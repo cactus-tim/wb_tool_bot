@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 
 from aiogram.types import BufferedInputFile
 import requests
@@ -9,8 +10,10 @@ import time
 
 from handlers.errors import safe_send_message, ping_tg
 from keyboards.keyboards import get_main_kb, get_func_kb
-from instance import bot, logger, wb_discounts_semaphore, get_next_proxy
+from instance import bot, wb_discounts_semaphore, get_next_proxy
 from database.req import *
+
+logger = logging.getLogger(__name__)
 
 
 async def send_df(bot, user, df: pd.DataFrame, base_filename: str = "report.xlsx", chunk_size: int = 10000):
@@ -157,31 +160,38 @@ async def get_all_ids(user_id: int, return_dict: bool = False):
         url = f"https://discounts-prices-api.wildberries.ru/api/v2/list/goods/filter?limit=1000&offset={offset}"
         response = None
         for attempt in range(5):
+            proxy = get_next_proxy()
+            proxy_label = list(proxy.values())[0] if proxy else 'NO PROXY'
+            logger.info(f"[get_all_ids] user={user_id} offset={offset} attempt={attempt+1} proxy={proxy_label}")
             try:
                 async with wb_discounts_semaphore:
-                    await asyncio.sleep(1)
-                    response = requests.get(url, headers=headers, timeout=15, proxies=get_next_proxy())
+                    await asyncio.sleep(2)
+                    t0 = time.perf_counter()
+                    response = requests.get(url, headers=headers, timeout=15, proxies=proxy)
+                    elapsed = time.perf_counter() - t0
+                logger.info(f"[get_all_ids] status={response.status_code} elapsed={elapsed:.2f}s")
             except requests.exceptions.RequestException as e:
-                logger.exception(f"Ошибка при запросе к {url}:\n{e}")
+                logger.error(f"[get_all_ids] RequestException: {e}")
                 await safe_send_message(bot, user_id, 'Ошибка при получении СПП', reply_markup=get_func_kb())
                 return all if return_dict else res
             if response.status_code == 429:
                 wait = 2 ** attempt * 5
-                logger.warning(f"429 в get_all_ids, ждём {wait}с (попытка {attempt + 1}/5)")
+                logger.warning(f"[get_all_ids] 429 → ждём {wait}с (попытка {attempt+1}/5)")
                 await asyncio.sleep(wait)
                 continue
             break
         if response is None or response.status_code != 200:
             if response is not None and response.status_code == 401:
-                logger.exception("Пользователь не авторизован (401).")
+                logger.error(f"[get_all_ids] 401 — ключ устарел, user={user_id}")
                 await safe_send_message(bot, user_id, 'Ошибка при получении СПП, ващ ключ устарел, укажите новый',
                                         reply_markup=get_func_kb())
             elif response is not None and response.status_code == 429:
-                logger.exception("Слишком много запросов (429), все попытки исчерпаны.")
+                logger.error(f"[get_all_ids] 429 — все {5} попытки исчерпаны, user={user_id}")
                 await safe_send_message(bot, user_id, 'Ошибка при получении СПП, попробуйте позже',
                                         reply_markup=get_func_kb())
             else:
-                logger.exception(f"Неожиданный статус код: {response.status_code if response else 'None'}")
+                code = response.status_code if response else 'None'
+                logger.error(f"[get_all_ids] неожиданный статус {code}, user={user_id}")
                 await safe_send_message(bot, user_id, 'Ошибка при получении СПП', reply_markup=get_func_kb())
             return all if return_dict else res
         df = pd.DataFrame(response.json()['data']['listGoods'])
@@ -239,16 +249,20 @@ async def get_spp(ids: list, user_id: int) -> dict:
         url = f'https://card.wb.ru/cards/v4/detail?nm={nm_param}&dest=-337422&locale=ru'
         await asyncio.sleep(1)
         proxy = get_next_proxy()
-        logger.info(f"card.wb.ru batch {batch[:2]}... proxy={'yes: ' + list(proxy.values())[0][:30] if proxy else 'NO PROXY'}")
+        proxy_label = list(proxy.values())[0] if proxy else 'NO PROXY'
+        logger.info(f"[get_spp card] batch={len(batch)} ids={batch[:2]}... proxy={proxy_label}")
         try:
+            t0 = time.perf_counter()
             response = requests.get(url, headers=wb_card_headers, timeout=10, proxies=proxy)
+            elapsed = time.perf_counter() - t0
+            logger.info(f"[get_spp card] status={response.status_code} elapsed={elapsed:.2f}s")
         except requests.exceptions.RequestException as e:
-            logger.exception(f"Ошибка при запросе к card.wb.ru batch:\n{e}")
+            logger.error(f"[get_spp card] RequestException: {e}")
             for el in batch:
                 res[el] = 'Не удалось получить СПП'
             continue
         if response.status_code != 200:
-            logger.warning(f"card.wb.ru вернул {response.status_code} для batch {batch[:2]}...")
+            logger.warning(f"[get_spp card] статус {response.status_code} batch={batch[:2]}...")
             for el in batch:
                 res[el] = 'Не удалось получить СПП'
             continue
@@ -284,33 +298,38 @@ async def get_spp(ids: list, user_id: int) -> dict:
             url = f"https://discounts-prices-api.wildberries.ru/api/v2/list/goods/filter?limit=1&filterNmID={el}"
             response = None
             for attempt in range(5):
+                proxy = get_next_proxy()
+                proxy_label = list(proxy.values())[0] if proxy else 'NO PROXY'
+                logger.info(f"[get_spp retry] nm={el} attempt={attempt+1} proxy={proxy_label}")
                 try:
                     async with wb_discounts_semaphore:
-                        await asyncio.sleep(1)
-                        response = requests.get(url, headers=headers, timeout=15, proxies=get_next_proxy())
+                        await asyncio.sleep(2)
+                        t0 = time.perf_counter()
+                        response = requests.get(url, headers=headers, timeout=15, proxies=proxy)
+                        elapsed = time.perf_counter() - t0
+                    logger.info(f"[get_spp retry] nm={el} status={response.status_code} elapsed={elapsed:.2f}s")
                 except requests.exceptions.RequestException as e:
-                    logger.exception(f"Ошибка при запросе к {url}:\n{e}")
+                    logger.error(f"[get_spp retry] nm={el} RequestException: {e}")
                     break
                 if response.status_code == 429:
                     wait = 2 ** attempt * 5
-                    logger.warning(f"429 в get_spp retry для {el}, ждём {wait}с (попытка {attempt + 1}/5)")
+                    logger.warning(f"[get_spp retry] nm={el} 429 → ждём {wait}с (попытка {attempt+1}/5)")
                     await asyncio.sleep(wait)
                     continue
                 break
             if response is None or response.status_code != 200:
-                if response is not None and response.status_code == 401:
-                    logger.exception(f"Пользователь не авторизован (401) для {el}.")
-                elif response is not None and response.status_code == 429:
-                    logger.exception(f"Слишком много запросов (429) для {el}, все попытки исчерпаны.")
-                elif response is not None:
-                    logger.exception(f"Неожиданный статус код: {response.status_code} для {el}")
+                code = response.status_code if response else 'None'
+                logger.error(f"[get_spp retry] nm={el} финальный статус {code}, пропускаем")
                 res[el] = 'Не удалось получить СПП'
                 continue
-            url1 = (f'https://card.wb.ru/cards/v4/detail?nm={el}&dest=-337422&locale=ru')
+            proxy2 = get_next_proxy()
+            url1 = f'https://card.wb.ru/cards/v4/detail?nm={el}&dest=-337422&locale=ru'
+            proxy2_label = list(proxy2.values())[0] if proxy2 else 'NO PROXY'
+            logger.info(f"[get_spp retry] card.wb.ru nm={el} proxy={proxy2_label}")
             try:
-                response1 = requests.get(url1, headers=wb_card_headers, timeout=10, proxies=get_next_proxy())
+                response1 = requests.get(url1, headers=wb_card_headers, timeout=10, proxies=proxy2)
             except requests.exceptions.RequestException as e:
-                logger.exception(f"Ошибка при запросе к {url1}:\n{e}")
+                logger.error(f"[get_spp retry] card.wb.ru nm={el} RequestException: {e}")
                 res[el] = 'Не удалось получить СПП'
                 continue
             if response1.status_code == 200:
