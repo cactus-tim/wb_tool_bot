@@ -238,14 +238,17 @@ async def get_spp(ids: list, user_id: int) -> dict:
         nm_param = ';'.join(str(x) for x in batch)
         url = f'https://card.wb.ru/cards/v4/detail?nm={nm_param}&dest=-337422&locale=ru'
         await asyncio.sleep(1)
+        proxy = get_next_proxy()
+        logger.info(f"card.wb.ru batch {batch[:2]}... proxy={'yes: ' + list(proxy.values())[0][:30] if proxy else 'NO PROXY'}")
         try:
-            response = requests.get(url, headers=wb_card_headers, timeout=10, proxies=get_next_proxy())
+            response = requests.get(url, headers=wb_card_headers, timeout=10, proxies=proxy)
         except requests.exceptions.RequestException as e:
             logger.exception(f"Ошибка при запросе к card.wb.ru batch:\n{e}")
             for el in batch:
                 res[el] = 'Не удалось получить СПП'
             continue
         if response.status_code != 200:
+            logger.warning(f"card.wb.ru вернул {response.status_code} для batch {batch[:2]}...")
             for el in batch:
                 res[el] = 'Не удалось получить СПП'
             continue
