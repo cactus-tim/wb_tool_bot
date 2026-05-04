@@ -6,6 +6,7 @@ import sys
 from aiogram.client.bot import DefaultBotProperties
 import logging
 import asyncio
+import itertools
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
 
@@ -41,3 +42,17 @@ logger = logging.getLogger(__name__)
 # Глобальный семафор для запросов к discounts-prices-api.wildberries.ru
 # Не более 1 параллельного запроса от всех пользователей одновременно
 wb_discounts_semaphore = asyncio.Semaphore(1)
+
+# Прокси для запросов к card.wb.ru
+# Формат в .env: http://user:pass@host:port,http://user:pass@host2:port2
+_raw_proxies = os.getenv('WB_PROXIES', '')
+_proxy_list = [p.strip() for p in _raw_proxies.split(',') if p.strip()]
+_proxy_cycle = itertools.cycle(_proxy_list) if _proxy_list else None
+
+
+def get_next_proxy() -> dict | None:
+    """Возвращает следующий прокси из ротации или None если прокси не настроены."""
+    if _proxy_cycle is None:
+        return None
+    proxy_url = next(_proxy_cycle)
+    return {'http': proxy_url, 'https': proxy_url}

@@ -9,7 +9,7 @@ import time
 
 from handlers.errors import safe_send_message, ping_tg
 from keyboards.keyboards import get_main_kb, get_func_kb
-from instance import bot, logger, wb_discounts_semaphore
+from instance import bot, logger, wb_discounts_semaphore, get_next_proxy
 from database.req import *
 
 
@@ -239,7 +239,7 @@ async def get_spp(ids: list, user_id: int) -> dict:
         url = f'https://card.wb.ru/cards/v4/detail?nm={nm_param}&dest=-337422&locale=ru'
         await asyncio.sleep(1)
         try:
-            response = requests.get(url, headers=wb_card_headers, timeout=10)
+            response = requests.get(url, headers=wb_card_headers, timeout=10, proxies=get_next_proxy())
         except requests.exceptions.RequestException as e:
             logger.exception(f"Ошибка при запросе к card.wb.ru batch:\n{e}")
             for el in batch:
@@ -305,7 +305,7 @@ async def get_spp(ids: list, user_id: int) -> dict:
                 continue
             url1 = (f'https://card.wb.ru/cards/v4/detail?nm={el}&dest=-337422&locale=ru')
             try:
-                response1 = requests.get(url1, headers=wb_card_headers, timeout=10)
+                response1 = requests.get(url1, headers=wb_card_headers, timeout=10, proxies=get_next_proxy())
             except requests.exceptions.RequestException as e:
                 logger.exception(f"Ошибка при запросе к {url1}:\n{e}")
                 res[el] = 'Не удалось получить СПП'
