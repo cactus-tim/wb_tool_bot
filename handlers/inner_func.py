@@ -160,14 +160,12 @@ async def get_all_ids(user_id: int, return_dict: bool = False):
         url = f"https://discounts-prices-api.wildberries.ru/api/v2/list/goods/filter?limit=1000&offset={offset}"
         response = None
         for attempt in range(5):
-            proxy = get_next_proxy()
-            proxy_label = list(proxy.values())[0] if proxy else 'NO PROXY'
-            logger.info(f"[get_all_ids] user={user_id} offset={offset} attempt={attempt+1} proxy={proxy_label}")
+            logger.info(f"[get_all_ids] user={user_id} offset={offset} attempt={attempt+1} (no proxy — official API)")
             try:
                 async with wb_discounts_semaphore:
-                    await asyncio.sleep(2)
+                    await asyncio.sleep(11)
                     t0 = time.perf_counter()
-                    response = requests.get(url, headers=headers, timeout=15, proxies=proxy)
+                    response = requests.get(url, headers=headers, timeout=15)
                     elapsed = time.perf_counter() - t0
                 logger.info(f"[get_all_ids] status={response.status_code} elapsed={elapsed:.2f}s")
             except requests.exceptions.RequestException as e:
@@ -298,14 +296,12 @@ async def get_spp(ids: list, user_id: int) -> dict:
             url = f"https://discounts-prices-api.wildberries.ru/api/v2/list/goods/filter?limit=1&filterNmID={el}"
             response = None
             for attempt in range(5):
-                proxy = get_next_proxy()
-                proxy_label = list(proxy.values())[0] if proxy else 'NO PROXY'
-                logger.info(f"[get_spp retry] nm={el} attempt={attempt+1} proxy={proxy_label}")
+                logger.info(f"[get_spp retry] nm={el} attempt={attempt+1} (no proxy — official API)")
                 try:
                     async with wb_discounts_semaphore:
-                        await asyncio.sleep(2)
+                        await asyncio.sleep(11)
                         t0 = time.perf_counter()
-                        response = requests.get(url, headers=headers, timeout=15, proxies=proxy)
+                        response = requests.get(url, headers=headers, timeout=15)
                         elapsed = time.perf_counter() - t0
                     logger.info(f"[get_spp retry] nm={el} status={response.status_code} elapsed={elapsed:.2f}s")
                 except requests.exceptions.RequestException as e:
