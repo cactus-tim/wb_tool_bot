@@ -160,7 +160,7 @@ async def get_all_ids(user_id: int, return_dict: bool = False):
             try:
                 async with wb_discounts_semaphore:
                     await asyncio.sleep(1)
-                    response = requests.get(url, headers=headers)
+                    response = requests.get(url, headers=headers, timeout=15, proxies=get_next_proxy())
             except requests.exceptions.RequestException as e:
                 logger.exception(f"Ошибка при запросе к {url}:\n{e}")
                 await safe_send_message(bot, user_id, 'Ошибка при получении СПП', reply_markup=get_func_kb())
@@ -287,7 +287,7 @@ async def get_spp(ids: list, user_id: int) -> dict:
                 try:
                     async with wb_discounts_semaphore:
                         await asyncio.sleep(1)
-                        response = requests.get(url, headers=headers)
+                        response = requests.get(url, headers=headers, timeout=15, proxies=get_next_proxy())
                 except requests.exceptions.RequestException as e:
                     logger.exception(f"Ошибка при запросе к {url}:\n{e}")
                     break
