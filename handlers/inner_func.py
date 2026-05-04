@@ -173,8 +173,9 @@ async def get_all_ids(user_id: int, return_dict: bool = False):
                 await safe_send_message(bot, user_id, 'Ошибка при получении СПП', reply_markup=get_func_kb())
                 return all if return_dict else res
             if response.status_code == 429:
-                wait = 2 ** attempt * 5
-                logger.warning(f"[get_all_ids] 429 → ждём {wait}с (попытка {attempt+1}/5)")
+                retry_after = response.headers.get('Retry-After')
+                wait = int(retry_after) if retry_after and retry_after.isdigit() else 2 ** attempt * 5
+                logger.warning(f"[get_all_ids] 429 → Retry-After={retry_after} ждём {wait}с (попытка {attempt+1}/5)")
                 await asyncio.sleep(wait)
                 continue
             break
@@ -211,18 +212,19 @@ async def get_all_ids(user_id: int, return_dict: bool = False):
         return res
 
 
-async def get_spp(ids: list, user_id: int) -> dict:
+async def get_spp(ids: list, user_id: int, prefetched_all: dict = None) -> dict:
     """
     Получение СПП на товары Wildberries по артикулам
 
     :param ids: список артикулов
     :param user_id: пользователь для которого получаем СПП
+    :param prefetched_all: уже загруженный dict {nmID: цена}, чтобы не дёргать API дважды
     :return: словарь {артикул: СПП}
     """
     res = {}
     user = await get_user(user_id)
     if not user:
-        logger.exception(f"Uncorrect user data")
+        logger.error(f"[get_spp] user not found: {user_id}")
         return res
     key = (await get_uric(user.cur_uric)).api_key
     headers = {
@@ -233,8 +235,11 @@ async def get_spp(ids: list, user_id: int) -> dict:
                       '(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
         'Accept': 'application/json',
     }
-    # Получаем все товары юр лица с ценами из официального API
-    all = await get_all_ids(user_id, return_dict=True)
+    # Используем переданный dict или загружаем сами
+    if prefetched_all is not None:
+        all = prefetched_all
+    else:
+        all = await get_all_ids(user_id, return_dict=True)
     # Делим ids на найденные в юр лице и те, которых нет
     ids_in_uric = [el for el in ids if el in all]
     retry = [el for el in ids if el not in all]
@@ -308,8 +313,9 @@ async def get_spp(ids: list, user_id: int) -> dict:
                     logger.error(f"[get_spp retry] nm={el} RequestException: {e}")
                     break
                 if response.status_code == 429:
-                    wait = 2 ** attempt * 5
-                    logger.warning(f"[get_spp retry] nm={el} 429 → ждём {wait}с (попытка {attempt+1}/5)")
+                    retry_after = response.headers.get('Retry-After')
+                    wait = int(retry_after) if retry_after and retry_after.isdigit() else 2 ** attempt * 5
+                    logger.warning(f"[get_spp retry] nm={el} 429 → Retry-After={retry_after} ждём {wait}с (попытка {attempt+1}/5)")
                     await asyncio.sleep(wait)
                     continue
                 break

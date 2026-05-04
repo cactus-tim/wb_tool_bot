@@ -176,16 +176,16 @@ async def cmd_spp(callback: CallbackQuery, state: FSMContext):
         await state.set_data({'output_format': output_format, 'input_format': input_format})
         await state.set_state(SPP.waiting_list)
     elif input_format == 'table':
-        ids = await get_all_ids(user.id)
-        if not ids:
+        all_ids = await get_all_ids(user.id, return_dict=True)
+        if not all_ids:
             await safe_send_message(bot, callback, 'Какая-то ошибка, попробуйте позже', reply_markup=get_func_kb())
             await state.clear()
             return
-
+        ids = list(all_ids.keys())
         to_del = (await safe_send_message(bot, user.id,
                                           text=f'Ожидаемое время получения - {20 + int(len(ids) * 0.25)} секунд'
                                           )).message_id
-        spp = await get_spp(ids, user.id)
+        spp = await get_spp(ids, user.id, prefetched_all=all_ids)
         if spp.get(0, 1) == 0:
             await safe_send_message(bot, user.id, "Неизвестная ошибка, попробуйте позже", reply_markup=get_func_kb())
             await state.clear()
