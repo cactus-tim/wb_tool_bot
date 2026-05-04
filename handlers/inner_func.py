@@ -9,7 +9,7 @@ import time
 
 from handlers.errors import safe_send_message, ping_tg
 from keyboards.keyboards import get_main_kb, get_func_kb
-from instance import bot, logger
+from instance import bot, logger, wb_discounts_semaphore
 from database.req import *
 
 
@@ -155,24 +155,33 @@ async def get_all_ids(user_id: int, return_dict: bool = False):
     # бежим в цикле и забираем все товары которые есть у продавца, оставляем либо артикулы, либо артикулы и цены
     while True:
         url = f"https://discounts-prices-api.wildberries.ru/api/v2/list/goods/filter?limit=1000&offset={offset}"
-        try:
-            await asyncio.sleep(1)
-            response = requests.get(url, headers=headers)
-        except requests.exceptions.RequestException as e:
-            logger.exception(f"Ошибка при запросе к {url}:\n{e}")
-            await safe_send_message(bot, user_id, 'Ошибка при получении СПП', reply_markup=get_func_kb())
-            return all if return_dict else res
-        if response.status_code != 200:
-            if response.status_code == 401:
+        response = None
+        for attempt in range(5):
+            try:
+                async with wb_discounts_semaphore:
+                    await asyncio.sleep(1)
+                    response = requests.get(url, headers=headers)
+            except requests.exceptions.RequestException as e:
+                logger.exception(f"Ошибка при запросе к {url}:\n{e}")
+                await safe_send_message(bot, user_id, 'Ошибка при получении СПП', reply_markup=get_func_kb())
+                return all if return_dict else res
+            if response.status_code == 429:
+                wait = 2 ** attempt * 5
+                logger.warning(f"429 в get_all_ids, ждём {wait}с (попытка {attempt + 1}/5)")
+                await asyncio.sleep(wait)
+                continue
+            break
+        if response is None or response.status_code != 200:
+            if response is not None and response.status_code == 401:
                 logger.exception("Пользователь не авторизован (401).")
                 await safe_send_message(bot, user_id, 'Ошибка при получении СПП, ващ ключ устарел, укажите новый',
                                         reply_markup=get_func_kb())
-            elif response.status_code == 429:
-                logger.exception("Слишком много запросов (429).")
+            elif response is not None and response.status_code == 429:
+                logger.exception("Слишком много запросов (429), все попытки исчерпаны.")
                 await safe_send_message(bot, user_id, 'Ошибка при получении СПП, попробуйте позже',
                                         reply_markup=get_func_kb())
             else:
-                logger.exception(f"Неожиданный статус код: {response.status_code}")
+                logger.exception(f"Неожиданный статус код: {response.status_code if response else 'None'}")
                 await safe_send_message(bot, user_id, 'Ошибка при получении СПП', reply_markup=get_func_kb())
             return all if return_dict else res
         df = pd.DataFrame(response.json()['data']['listGoods'])
@@ -257,19 +266,27 @@ async def get_spp(ids: list, user_id: int) -> dict:
         start_time = time.perf_counter()
         for el in chunk:
             url = f"https://discounts-prices-api.wildberries.ru/api/v2/list/goods/filter?limit=1&filterNmID={el}"
-            try:
-                await asyncio.sleep(0.3)
-                response = requests.get(url, headers=headers)
-            except requests.exceptions.RequestException as e:
-                logger.exception(f"Ошибка при запросе к {url}:\n{e}")
-                res[el] = 'Не удалось получить СПП'
-                continue
-            if response.status_code != 200:
-                if response.status_code == 401:
+            response = None
+            for attempt in range(5):
+                try:
+                    async with wb_discounts_semaphore:
+                        await asyncio.sleep(1)
+                        response = requests.get(url, headers=headers)
+                except requests.exceptions.RequestException as e:
+                    logger.exception(f"Ошибка при запросе к {url}:\n{e}")
+                    break
+                if response.status_code == 429:
+                    wait = 2 ** attempt * 5
+                    logger.warning(f"429 в get_spp retry для {el}, ждём {wait}с (попытка {attempt + 1}/5)")
+                    await asyncio.sleep(wait)
+                    continue
+                break
+            if response is None or response.status_code != 200:
+                if response is not None and response.status_code == 401:
                     logger.exception(f"Пользователь не авторизован (401) для {el}.")
-                elif response.status_code == 429:
-                    logger.exception(f"Слишком много запросов (429) для {el}.")
-                else:
+                elif response is not None and response.status_code == 429:
+                    logger.exception(f"Слишком много запросов (429) для {el}, все попытки исчерпаны.")
+                elif response is not None:
                     logger.exception(f"Неожиданный статус код: {response.status_code} для {el}")
                 res[el] = 'Не удалось получить СПП'
                 continue

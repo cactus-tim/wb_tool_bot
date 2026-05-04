@@ -37,3 +37,7 @@ logging.basicConfig(
 
 
 logger = logging.getLogger(__name__)
+
+# Глобальный семафор для запросов к discounts-prices-api.wildberries.ru
+# Не более 1 параллельного запроса от всех пользователей одновременно
+wb_discounts_semaphore = asyncio.Semaphore(1)
