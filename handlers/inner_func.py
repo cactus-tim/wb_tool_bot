@@ -163,19 +163,20 @@ async def get_all_ids(user_id: int, return_dict: bool = False):
             logger.info(f"[get_all_ids] user={user_id} offset={offset} attempt={attempt+1} (no proxy — official API)")
             try:
                 async with wb_discounts_semaphore:
-                    await asyncio.sleep(11)
+                    await asyncio.sleep(2)
                     t0 = time.perf_counter()
                     response = requests.get(url, headers=headers, timeout=15)
                     elapsed = time.perf_counter() - t0
-                logger.info(f"[get_all_ids] status={response.status_code} elapsed={elapsed:.2f}s")
+                remaining = response.headers.get('X-Ratelimit-Remaining', '?')
+                logger.info(f"[get_all_ids] status={response.status_code} elapsed={elapsed:.2f}s remaining={remaining}")
             except requests.exceptions.RequestException as e:
                 logger.error(f"[get_all_ids] RequestException: {e}")
                 await safe_send_message(bot, user_id, 'Ошибка при получении СПП', reply_markup=get_func_kb())
                 return all if return_dict else res
             if response.status_code == 429:
-                retry_after = response.headers.get('Retry-After')
+                retry_after = response.headers.get('X-Ratelimit-Retry')
                 wait = int(retry_after) if retry_after and retry_after.isdigit() else 2 ** attempt * 5
-                logger.warning(f"[get_all_ids] 429 → Retry-After={retry_after} ждём {wait}с (попытка {attempt+1}/5)")
+                logger.warning(f"[get_all_ids] 429 → X-Ratelimit-Retry={retry_after} ждём {wait}с (попытка {attempt+1}/5)")
                 await asyncio.sleep(wait)
                 continue
             break
@@ -304,18 +305,19 @@ async def get_spp(ids: list, user_id: int, prefetched_all: dict = None) -> dict:
                 logger.info(f"[get_spp retry] nm={el} attempt={attempt+1} (no proxy — official API)")
                 try:
                     async with wb_discounts_semaphore:
-                        await asyncio.sleep(11)
+                        await asyncio.sleep(2)
                         t0 = time.perf_counter()
                         response = requests.get(url, headers=headers, timeout=15)
                         elapsed = time.perf_counter() - t0
-                    logger.info(f"[get_spp retry] nm={el} status={response.status_code} elapsed={elapsed:.2f}s")
+                    remaining = response.headers.get('X-Ratelimit-Remaining', '?')
+                    logger.info(f"[get_spp retry] nm={el} status={response.status_code} elapsed={elapsed:.2f}s remaining={remaining}")
                 except requests.exceptions.RequestException as e:
                     logger.error(f"[get_spp retry] nm={el} RequestException: {e}")
                     break
                 if response.status_code == 429:
-                    retry_after = response.headers.get('Retry-After')
+                    retry_after = response.headers.get('X-Ratelimit-Retry')
                     wait = int(retry_after) if retry_after and retry_after.isdigit() else 2 ** attempt * 5
-                    logger.warning(f"[get_spp retry] nm={el} 429 → Retry-After={retry_after} ждём {wait}с (попытка {attempt+1}/5)")
+                    logger.warning(f"[get_spp retry] nm={el} 429 → X-Ratelimit-Retry={retry_after} ждём {wait}с (попытка {attempt+1}/5)")
                     await asyncio.sleep(wait)
                     continue
                 break
@@ -360,8 +362,8 @@ async def get_spp(ids: list, user_id: int, prefetched_all: dict = None) -> dict:
             else:
                 res[el] = 'Не удалось получить СПП'
         cur_timer = time.perf_counter() - start_time
-        if cur_timer <= 11:
-            await asyncio.sleep(11 - cur_timer)
+        if cur_timer <= 2:
+            await asyncio.sleep(2 - cur_timer)
 
     return res
 
