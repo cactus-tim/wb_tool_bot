@@ -42,8 +42,9 @@ async def get_uric_name(message: Message, state: FSMContext):
         return
 
     await state.update_data(uric_name=message.text)
-    link = "https://blog-promopult-ru.turbopages.org/turbo/blog.promopult.ru/s/marketplejsy/api-klyuch-wildberries.html"
-    await safe_send_message(bot, message, f"Введите новый API ключ:\n<a href=\"{link}\">Как получить ключ?</a>\n",
+    link = "https://seller.wildberries.ru/instructions/ru/ru/material/how-to-create-update-or-delete-a-wb-api-token"
+    await safe_send_message(bot, message, f"Введите новый API ключ:\n<a href=\"{link}\">Как получить ключ?</a>\n"
+                                          f"При создании токена выбирайте тип <b>«Персональный токен»</b>",
                             reply_markup=get_cancel_ikb('main'))
     await state.set_state(CreateUric.api_key)
 
